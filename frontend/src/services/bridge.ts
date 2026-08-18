@@ -80,6 +80,28 @@ export async function setHotkey(combo: string): Promise<void> {
   }
 }
 
+/** Suspend the global toggle hotkey while recording a new one. */
+export async function suspendHotkey(): Promise<void> {
+  if (await isNative()) {
+    await Store.SuspendHotkey();
+  }
+}
+
+/** Restore the toggle hotkey after a recording session. */
+export async function resumeHotkey(): Promise<void> {
+  if (await isNative()) {
+    await Store.ResumeHotkey();
+  }
+}
+
+/** Native folder picker; resolves to "" when the user cancels. */
+export async function chooseDataDir(): Promise<string> {
+  if (await isNative()) {
+    return await Store.ChooseDataDir();
+  }
+  throw new Error(t.nativeOnly);
+}
+
 /** Open the active data directory in Explorer (native only). */
 export async function openDataDir(): Promise<void> {
   if (await isNative()) {

@@ -54,6 +54,12 @@ type Store struct {
 	// hotkeyReconfigure is injected by main.go; it re-registers the global
 	// toggle hotkey without disturbing the existing binding on failure.
 	hotkeyReconfigure func(combo string) error
+	// hotkeySuspend/hotkeyResume temporarily unregister/restore the global
+	// toggle hotkey while the user records a new combo in the settings panel.
+	hotkeySuspend func() error
+	hotkeyResume  func() error
+	// pickDir opens the native folder picker (Windows).
+	pickDir func() (string, error)
 }
 
 func NewStore() *Store {
@@ -82,6 +88,11 @@ func NewStore() *Store {
 
 	// Sync the auto-start flag so the settings page reflects reality.
 	s.settings.LaunchAtStartup = s.getLaunchAtStartup()
+
+	// Guarantee a concrete default so the UI always shows a real combo.
+	if s.settings.Hotkey == "" {
+		s.settings.Hotkey = defaultHotkey
+	}
 	return s
 }
 
@@ -256,6 +267,34 @@ func (s *Store) SetDataDir(path string) error {
 	os.Remove(filepath.Join(oldDir, "notes.json"))
 	os.Remove(filepath.Join(oldDir, "settings.json"))
 	return nil
+}
+
+// SuspendHotkey temporarily unregisters the global toggle hotkey while the
+// user records a new combo in the settings panel, so pressing the old combo
+// mid-recording cannot toggle the window. No-op in browser fallback.
+func (s *Store) SuspendHotkey() error {
+	if s.hotkeySuspend == nil {
+		return nil
+	}
+	return s.hotkeySuspend()
+}
+
+// ResumeHotkey restores the toggle hotkey after SuspendHotkey (re-registering
+// whatever combo is current, which may be a newly configured one).
+func (s *Store) ResumeHotkey() error {
+	if s.hotkeyResume == nil {
+		return nil
+	}
+	return s.hotkeyResume()
+}
+
+// ChooseDataDir opens the native folder picker and returns the selected path,
+// or "" when the user cancels. Error in browser fallback mode.
+func (s *Store) ChooseDataDir() (string, error) {
+	if s.pickDir == nil {
+		return "", fmt.Errorf("folder picker unavailable")
+	}
+	return s.pickDir()
 }
 
 // OpenDataDir reveals the active data directory in Explorer (no-op in browser

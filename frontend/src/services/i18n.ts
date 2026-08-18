@@ -35,7 +35,7 @@ const en = {
   dataDesc: "Notes live in a single notes.json file in this folder.",
   openExplorer: "Open in Explorer",
   changeLocationTitle: "Move data to another folder",
-  targetDirPlaceholder: "Full path to an empty folder, e.g. D:\\slite-data",
+  chooseFolder: "Choose folder…",
   checkDir: "Check",
   checkDirOk: "Target is ready",
   migrateHere: "Move my notes here",

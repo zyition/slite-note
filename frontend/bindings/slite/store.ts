@@ -19,6 +19,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * ChooseDataDir opens the native folder picker and returns the selected path,
+ * or "" when the user cancels. Error in browser fallback mode.
+ */
+export function ChooseDataDir(): $CancellablePromise<string> {
+    return $Call.ByID(2753525289);
+}
+
+/**
  * CurrentDataDir returns the active data directory path (display in settings).
  */
 export function CurrentDataDir(): $CancellablePromise<string> {
@@ -58,6 +66,14 @@ export function Ping(): $CancellablePromise<string> {
 }
 
 /**
+ * ResumeHotkey restores the toggle hotkey after SuspendHotkey (re-registering
+ * whatever combo is current, which may be a newly configured one).
+ */
+export function ResumeHotkey(): $CancellablePromise<void> {
+    return $Call.ByID(2145843646);
+}
+
+/**
  * SaveNotes persists the full note list atomically. Note deletion is handled
  * on the frontend (remove from list, then save the full list).
  */
@@ -89,6 +105,15 @@ export function SetDataDir(path: string): $CancellablePromise<void> {
  */
 export function SetHotkey(combo: string): $CancellablePromise<void> {
     return $Call.ByID(2514178955, combo);
+}
+
+/**
+ * SuspendHotkey temporarily unregisters the global toggle hotkey while the
+ * user records a new combo in the settings panel, so pressing the old combo
+ * mid-recording cannot toggle the window. No-op in browser fallback.
+ */
+export function SuspendHotkey(): $CancellablePromise<void> {
+    return $Call.ByID(3646761851);
 }
 
 /**

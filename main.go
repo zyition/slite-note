@@ -35,9 +35,13 @@ const (
 	defaultWidth  = 360
 )
 
-// activeHotkey is the currently registered toggle accelerator; empty until the
-// first successful registration.
+// activeHotkey is the currently registered toggle accelerator; empty while
+// suspended or until the first successful registration.
 var activeHotkey = ""
+
+// suspendedHotkey remembers the combo unregistered by suspendToggleHotkey so
+// resumeToggleHotkey can restore it (unless a new combo was set meanwhile).
+var suspendedHotkey = ""
 
 // debugLog writes diagnostics to %APPDATA%/slite/log.txt (kept small: useful
 // while the app is headless).
@@ -105,6 +109,17 @@ func main() {
 	}
 	registerToggleHotkey(toggleHotkey)
 	store.hotkeyReconfigure = reconfigureHotkey
+	store.hotkeySuspend = suspendToggleHotkey
+	store.hotkeyResume = resumeToggleHotkey
+	store.pickDir = func() (string, error) {
+		result, err := app.Dialog.OpenFile().
+			CanChooseDirectories(true).
+			CanChooseFiles(false).
+			SetTitle("Select data folder").
+			AttachToWindow(mainWindow).
+			PromptForSingleSelection()
+		return result, err
+	}
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		positionWindowAtStartup()
@@ -162,6 +177,42 @@ func reconfigureHotkey(newCombo string) error {
 		}
 	}
 	debugLog("hotkey changed: %s -> %s", old, newCombo)
+	return nil
+}
+
+// suspendToggleHotkey unregisters the active combo (idempotent; no-op when
+// nothing is registered). Called before the settings panel starts recording.
+func suspendToggleHotkey() error {
+	if activeHotkey == "" {
+		return nil
+	}
+	if err := app.GlobalShortcut.Unregister(activeHotkey); err != nil {
+		return fmt.Errorf("suspend hotkey %q: %w", activeHotkey, err)
+	}
+	suspendedHotkey = activeHotkey
+	activeHotkey = ""
+	debugLog("hotkey suspended: %s", suspendedHotkey)
+	return nil
+}
+
+// resumeToggleHotkey restores the toggle hotkey after a suspension. If a new
+// combo was registered while suspended (reconfigureHotkey ran), it is already
+// active and there is nothing to restore.
+func resumeToggleHotkey() error {
+	if activeHotkey != "" {
+		// A new combo is already registered; drop the stale suspension.
+		suspendedHotkey = ""
+		return nil
+	}
+	if suspendedHotkey == "" {
+		return nil
+	}
+	if err := app.GlobalShortcut.Register(suspendedHotkey, toggleHotkeyCallback); err != nil {
+		return fmt.Errorf("resume hotkey %q: %w", suspendedHotkey, err)
+	}
+	activeHotkey = suspendedHotkey
+	suspendedHotkey = ""
+	debugLog("hotkey resumed: %s", activeHotkey)
 	return nil
 }
 

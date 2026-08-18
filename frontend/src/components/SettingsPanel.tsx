@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, FolderOpen, Keyboard, Loader2, Power, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, FolderOpen, FolderSearch, Keyboard, Loader2, Power, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { t } from "../services/i18n";
 import { formatCombo, displayCombo } from "../services/hotkey";
 import {
+  chooseDataDir,
   currentDataDir,
   openDataDir,
+  resumeHotkey,
   setDataDir,
   setHotkey,
+  suspendHotkey,
   validateDataDir,
 } from "../services/bridge";
 
@@ -28,16 +31,23 @@ type DirCheck =
 /**
  * SettingsPanel — modal overlay reached from the title bar gear or the tray
  * "Settings…" entry. Sections: global shortcut (record a combo), launch at
- * startup, and data location (reveal / pre-check / migrate).
+ * startup, and data location (reveal / pick a folder / pre-check / migrate).
+ *
+ * Hotkey recording temporarily suspends the OS-level binding so pressing the
+ * old combo cannot toggle the window mid-recording; a combo equal to the
+ * current one is simply kept.
  */
 export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPanelProps) {
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [dataDir, setDataDirDisplay] = useState(settings.dataDir || "…");
-  const [dirInput, setDirInput] = useState("");
+  const [pickedDir, setPickedDir] = useState<string | null>(null);
   const [dirCheck, setDirCheck] = useState<DirCheck>({ status: "idle" });
   const [migrating, setMigrating] = useState(false);
   const [migrated, setMigrated] = useState(false);
+
+  // Tracks whether the toggle hotkey is currently suspended (recording active).
+  const suspendedRef = useRef(false);
 
   // Refresh the displayed directory whenever the panel opens (the value may
   // have changed after a migration).
@@ -46,7 +56,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
     setHotkeyError(null);
     setMigrated(false);
     setDirCheck({ status: "idle" });
-    setDirInput("");
+    setPickedDir(null);
     currentDataDir()
       .then(setDataDirDisplay)
       .catch(() => {});
@@ -55,11 +65,39 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !recording) onClose();
+      if (e.key === "Escape" && !recording) handleClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, recording, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, recording]);
+
+  /* ---------- hotkey recording ---------- */
+
+  // Ends a recording session and restores the suspended hotkey if needed.
+  const stopRecording = useCallback(() => {
+    setRecording(false);
+    if (suspendedRef.current) {
+      suspendedRef.current = false;
+      resumeHotkey().catch(() => {});
+    }
+  }, []);
+
+  const beginRecording = useCallback(async () => {
+    setHotkeyError(null);
+    try {
+      await suspendHotkey();
+      suspendedRef.current = true;
+      setRecording(true);
+    } catch (err) {
+      setHotkeyError(String((err as Error)?.message ?? err));
+    }
+  }, []);
+
+  const handleClose = useCallback(() => {
+    stopRecording();
+    onClose();
+  }, [stopRecording, onClose]);
 
   // While recording, capture every keydown at the window level so the combo
   // works regardless of which element has focus.
@@ -70,18 +108,23 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Escape") {
-        setRecording(false);
+        stopRecording();
         return;
       }
       const combo = formatCombo(e);
       if (!combo) return; // bare modifier / unsupported key: keep waiting
-      setRecording(false);
+      if (combo === settings.hotkey) {
+        // Same combo: keep it as-is; resume restores the binding.
+        stopRecording();
+        return;
+      }
       try {
         await setHotkey(combo);
         onChanged({ ...settings, hotkey: combo });
       } catch (err) {
         setHotkeyError(String((err as Error)?.message ?? err));
       }
+      stopRecording();
     };
   });
   useEffect(() => {
@@ -91,27 +134,26 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
     return () => window.removeEventListener("keydown", h, true);
   }, [recording]);
 
-  /* ---------- hotkey recording ---------- */
-
-  const beginRecording = () => {
-    setRecording(true);
-    setHotkeyError(null);
-  };
-
-
-  if (!open) return null;
-
   /* ---------- data dir ---------- */
 
-  const handleCheck = async () => {
-    setDirCheck({ status: "checking" });
-    const err = await validateDataDir(dirInput);
-    setDirCheck(err ? { status: "error", message: err } : { status: "ok" });
-  };
+  const handlePickDir = useCallback(async () => {
+    setMigrated(false);
+    try {
+      const dir = await chooseDataDir();
+      if (!dir) return; // user cancelled
+      setPickedDir(dir);
+      setDirCheck({ status: "checking" });
+      const err = await validateDataDir(dir);
+      setDirCheck(err ? { status: "error", message: err } : { status: "ok" });
+    } catch (err) {
+      setDirCheck({ status: "error", message: String((err as Error)?.message ?? err) });
+    }
+  }, []);
 
-  const handleMigrate = async () => {
+  const handleMigrate = useCallback(async () => {
+    if (!pickedDir) return;
     setMigrating(true);
-    const err = await setDataDir(dirInput);
+    const err = await setDataDir(pickedDir);
     setMigrating(false);
     if (err) {
       setDirCheck({ status: "error", message: err });
@@ -121,24 +163,26 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
     if (dir) setDataDirDisplay(dir);
     setMigrated(true);
     setDirCheck({ status: "idle" });
-  };
+  }, [pickedDir]);
+
+  if (!open) return null;
 
   const sectionLabel =
     "mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]";
-  const inputCls =
-    "w-full rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--accent)]";
   const primaryBtn =
-    "rounded bg-[var(--accent)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--accent-fg)] hover:opacity-90 disabled:opacity-50";
+    "flex items-center gap-1 rounded bg-[var(--accent)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--accent-fg)] hover:opacity-90 disabled:opacity-50";
+  const secondaryBtn =
+    "flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-input)] px-2.5 py-1.5 text-[11px] font-medium hover:bg-[var(--hover)]";
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center bg-black/30 p-4 pt-14"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
-      {/* While recording, show a dim hint overlay so the user knows a combo
-          is being captured. */}
+      {/* While recording, show a dim hint so the user knows a combo is being
+          captured. */}
       {recording && (
         <div className="pointer-events-none fixed inset-0 z-[102] flex items-start justify-center pt-24">
           <span className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-[11px] font-medium text-[var(--accent-fg)] shadow">
@@ -158,7 +202,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
           <h2 className="text-[12px] font-semibold">{t.settingsTitle}</h2>
           <button
             className="rounded p-1 text-[var(--fg-muted)] hover:bg-[var(--hover)]"
-            onClick={onClose}
+            onClick={handleClose}
             title={t.closePanel}
           >
             <X size={13} />
@@ -184,8 +228,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
               )}
               <button
                 className={primaryBtn}
-                onClick={recording ? () => setRecording(false) : beginRecording}
-                disabled={recording}
+                onClick={recording ? stopRecording : () => void beginRecording()}
               >
                 {recording ? t.cancel : t.changeHotkey}
               </button>
@@ -227,25 +270,26 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
             <div className="mb-1.5 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
               {dataDir}
             </div>
-            <button className="text-[11px] text-[var(--accent)] hover:underline" onClick={() => void openDataDir()}>
-              {t.openExplorer}
+            <button className={secondaryBtn} onClick={() => void openDataDir()}>
+              <FolderOpen size={11} /> {t.openExplorer}
             </button>
 
             <div className="mt-3 border-t border-[var(--border)] pt-3">
               <div className="mb-1.5 text-[11px] font-medium">{t.changeLocationTitle}</div>
-              <div className="flex gap-1.5">
-                <input
-                  className={inputCls}
-                  value={dirInput}
-                  onChange={(e) => setDirInput(e.target.value)}
-                  placeholder={t.targetDirPlaceholder}
-                  spellCheck={false}
-                />
-                <button className={primaryBtn} onClick={() => void handleCheck()} disabled={!dirInput.trim()}>
-                  {dirCheck.status === "checking" ? <Loader2 size={11} className="animate-spin" /> : t.checkDir}
-                </button>
-              </div>
+              <button className={secondaryBtn} onClick={() => void handlePickDir()}>
+                <FolderSearch size={11} /> {t.chooseFolder}
+              </button>
 
+              {pickedDir && (
+                <div className="mt-2 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
+                  {pickedDir}
+                </div>
+              )}
+              {dirCheck.status === "checking" && (
+                <p className="mt-2 flex items-center gap-1 text-[10px] text-[var(--fg-muted)]">
+                  <Loader2 size={11} className="animate-spin" /> {t.checkDir}…
+                </p>
+              )}
               {dirCheck.status === "ok" && (
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
