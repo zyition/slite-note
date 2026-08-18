@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Theme system: three themes applied via [data-theme] on <html>.      */
+/* CSS variables drive both the app shell and BlockNote overrides.     */
+/* ------------------------------------------------------------------ */
+
+:root,
+[data-theme="yellow"] {
+  --bg: #fff8dc;
+  --bg-titlebar: #f6e9a9;
+  --fg: #4a3b10;
+  --fg-muted: #8a7428;
+  --accent: #e8b300;
+  --accent-fg: #4a3b10;
+  --border: rgba(122, 94, 14, 0.16);
+  --hover: rgba(232, 179, 0, 0.16);
+  --code-bg: rgba(122, 94, 14, 0.1);
+  --quote-border: #d4a800;
+}
+
+[data-theme="gray"] {
+  --bg: #f4f4f2;
+  --bg-titlebar: #e9e9e6;
+  --fg: #262626;
+  --fg-muted: #8a8a86;
+  --accent: #9a9a96;
+  --accent-fg: #262626;
+  --border: rgba(0, 0, 0, 0.1);
+  --hover: rgba(0, 0, 0, 0.06);
+  --code-bg: rgba(0, 0, 0, 0.05);
+  --quote-border: #b8b8b4;
+}
+
+[data-theme="dark"] {
+  --bg: #1f1f1f;
+  --bg-titlebar: #2a2a2a;
+  --fg: #e8e8e4;
+  --fg-muted: #9a9a96;
+  --accent: #6b6b68;
+  --accent-fg: #e8e8e4;
+  --border: rgba(255, 255, 255, 0.1);
+  --hover: rgba(255, 255, 255, 0.08);
+  --code-bg: rgba(255, 255, 255, 0.08);
+  --quote-border: #6b6b68;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Drag region: the whole title bar drags the frameless window (Wails v3). */
+.titlebar {
+  --wails-draggable: drag;
+}
+.titlebar button,
+.titlebar .no-drag {
+  --wails-draggable: no-drag;
+}
+
+/* ------------------------------------------------------------------ */
+/* BlockNote theming via its CSS variables                             */
+/* ------------------------------------------------------------------ */
+
+.bn-container {
+  --bn-colors-editor-text: var(--fg);
+  --bn-colors-editor-background: transparent;
+  --bn-colors-menu-text: var(--fg);
+  --bn-colors-menu-background: var(--bg);
+  --bn-colors-tooltip-text: var(--fg);
+  --bn-colors-tooltip-background: var(--bg-titlebar);
+  --bn-colors-hovered-text: var(--fg);
+  --bn-colors-hovered-background: var(--hover);
+  --bn-colors-selected-text: var(--fg);
+  --bn-colors-selected-background: var(--hover);
+  --bn-colors-disabled-text: var(--fg-muted);
+  --bn-colors-disabled-background: transparent;
+  --bn-colors-border: var(--border);
+  --bn-colors-border-active: var(--accent);
+  --bn-colors-side-menu: var(--fg-muted);
+  --bn-colors-highlights-gray-text: inherit;
+  --bn-color-highlight-gray: var(--code-bg);
+  --bn-color-highlight-purple: #d3b8e8;
+  --bn-color-highlight-red: #f0b8b8;
+  --bn-color-highlight-orange: #f5d0a8;
+  --bn-color-highlight-yellow: #f5e9a8;
+  --bn-color-highlight-green: #c4e8b8;
+  --bn-color-highlight-blue: #b8d4f0;
+  --bn-color-highlight-teal: #b8e8e0;
+  --bn-color-highlight-pink: #f0b8d4;
+  --bn-font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.bn-editor {
+  padding-inline: 14px;
+  padding-block: 6px;
+  caret-color: var(--fg);
+}
+
+.bn-editor .bn-block-content {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.bn-editor .bn-inline-content:not(.bn-block-content) {
+  user-select: text;
+}
+
+/* Code block uses the theme code background */
+.bn-editor .bn-block[data-content-type="codeBlock"] .bn-block-content {
+  background: var(--code-bg);
+  border-radius: 6px;
+}
+
+/* Selection colour stays legible on every theme */
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}

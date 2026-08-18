@@ -1,0 +1,190 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Block } from "@blocknote/core";
+import { TitleBar } from "./components/TitleBar";
+import { Editor } from "./components/Editor";
+import type { Note, Settings, ThemeName } from "./types/note";
+import { makeNote, THEME_NAMES } from "./types/note";
+import { deriveTitle } from "./services/title";
+import { THEMES, cycleTheme as nextThemeName } from "./services/theme";
+import { t } from "./services/i18n";
+import {
+  loadNotes,
+  loadSettings,
+  saveNotes,
+  saveSettings,
+  setWindowBackground,
+  hideWindow,
+  onHide,
+  onQuit,
+} from "./services/bridge";
+
+const SAVE_DEBOUNCE_MS = 800;
+
+export default function App() {
+  const [ready, setReady] = useState(false);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings>({ theme: "yellow", alwaysOnTop: false });
+
+  const notesRef = useRef<Note[]>(notes);
+  notesRef.current = notes;
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* ---------------- boot ---------------- */
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [loadedNotes, loadedSettings] = await Promise.all([
+        loadNotes(),
+        loadSettings(),
+      ]);
+      if (cancelled) return;
+      let list = loadedNotes;
+      if (list.length === 0) {
+        // First run: seed one empty note so the editor has a home.
+        list = [makeNote()];
+        await saveNotes(list);
+      }
+      setNotes(list);
+      setSettings(loadedSettings);
+      setActiveId(list[list.length - 1]?.id ?? null);
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* ---------------- theme side effects ---------------- */
+
+  useEffect(() => {
+    const theme = THEME_NAMES.includes(settings.theme as ThemeName)
+      ? (settings.theme as ThemeName)
+      : "yellow";
+    document.documentElement.dataset.theme = theme;
+    void setWindowBackground(...THEMES[theme].rgb);
+  }, [settings.theme]);
+
+  /* ---------------- persistence ---------------- */
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      saveNotes(notesRef.current).catch((e) => console.error(t.saveFailed, e));
+    }, SAVE_DEBOUNCE_MS);
+  }, []);
+
+  const flushSave = useCallback(() => {
+    if (!saveTimer.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    saveNotes(notesRef.current).catch((e) => console.error(t.saveFailed, e));
+  }, []);
+
+  // Flush pending saves when the window hides or the app quits.
+  useEffect(() => {
+    onHide(flushSave);
+    onQuit(flushSave);
+    window.addEventListener("beforeunload", flushSave);
+    return () => window.removeEventListener("beforeunload", flushSave);
+  }, [flushSave]);
+
+  /* ---------------- actions ---------------- */
+
+  const updateActiveBlocks = useCallback(
+    (blocks: Block[]) => {
+      setNotes((prev) => {
+        const next = prev.map((n) =>
+          n.id === activeId
+            ? { ...n, blocks: blocks as unknown as Note["blocks"], updatedAt: Date.now() }
+            : n,
+        );
+        notesRef.current = next;
+        return next;
+      });
+      scheduleSave();
+    },
+    [activeId, scheduleSave],
+  );
+
+  const createNote = useCallback(() => {
+    const note = makeNote();
+    const next = [...notesRef.current, note];
+    notesRef.current = next;
+    setNotes(next);
+    setActiveId(note.id);
+    scheduleSave();
+  }, [scheduleSave]);
+
+  const cycleTheme = useCallback(() => {
+    setSettings((prev) => {
+      const next = { ...prev, theme: nextThemeName(prev.theme as ThemeName) };
+      saveSettings(next).catch((e) => console.error(t.saveFailed, e));
+      return next;
+    });
+  }, []);
+
+  const togglePin = useCallback(() => {
+    setSettings((prev) => {
+      const next = { ...prev, alwaysOnTop: !prev.alwaysOnTop };
+      saveSettings(next).catch((e) => console.error(t.saveFailed, e));
+      return next;
+    });
+  }, []);
+
+  const hide = useCallback(() => {
+    flushSave();
+    void hideWindow();
+  }, [flushSave]);
+
+  const titleFor = useCallback(
+    (note: Note) => (note.title.trim() ? note.title : deriveTitle(note.blocks)),
+    [],
+  );
+
+  const titles = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of notes) m.set(n.id, titleFor(n));
+    return m;
+  }, [notes, titleFor]);
+
+  const activeNote = notes.find((n) => n.id === activeId) ?? null;
+  const theme = (THEME_NAMES.includes(settings.theme as ThemeName)
+    ? settings.theme
+    : "yellow") as ThemeName;
+
+  /* ---------------- render ---------------- */
+
+  if (!ready) {
+    return <div className="h-full w-full" aria-busy="true" />;
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <TitleBar
+        notes={notes}
+        activeId={activeId}
+        titleFor={(n) => titles.get(n.id) ?? ""}
+        pinned={settings.alwaysOnTop}
+        onSelect={setActiveId}
+        onNewNote={createNote}
+        onCycleTheme={cycleTheme}
+        onTogglePin={togglePin}
+        onHide={hide}
+        onClose={hide}
+      />
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        {activeNote && (
+          <Editor
+            key={activeNote.id}
+            note={activeNote}
+            blocknoteTheme={THEMES[theme].blocknote}
+            onChange={updateActiveBlocks}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
