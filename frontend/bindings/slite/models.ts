@@ -21,7 +21,7 @@ export interface Note {
  */
 export interface Settings {
     /**
-     * "yellow" | "gray" | "dark"
+     * "system" | "yellow" | "gray" | "dark"
      */
     "theme": string;
     "alwaysOnTop": boolean;
@@ -40,4 +40,9 @@ export interface Settings {
      * "" = default os.UserConfigDir()/slite
      */
     "dataDir": string;
+
+    /**
+     * window opacity 0.3–1.0, 1 = opaque
+     */
+    "opacity": number;
 }

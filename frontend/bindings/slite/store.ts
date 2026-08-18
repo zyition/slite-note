@@ -83,7 +83,8 @@ export function SaveNotes(notes: $models.Note[] | null): $CancellablePromise<voi
 
 /**
  * SaveSettings persists settings and applies window-level side effects
- * (always-on-top, auto-start). DataDir is managed exclusively by SetDataDir.
+ * (always-on-top, window opacity, auto-start). DataDir is managed
+ * exclusively by SetDataDir.
  */
 export function SaveSettings(settings: $models.Settings): $CancellablePromise<void> {
     return $Call.ByID(698043607, settings);

@@ -24,11 +24,12 @@ type Note struct {
 
 // Settings holds app-level preferences persisted across restarts.
 type Settings struct {
-	Theme           string `json:"theme"`           // "yellow" | "gray" | "dark"
-	AlwaysOnTop     bool   `json:"alwaysOnTop"`
-	Hotkey          string `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
-	LaunchAtStartup bool   `json:"launchAtStartup"` // Windows Run key (HKCU)
-	DataDir         string `json:"dataDir"`         // "" = default os.UserConfigDir()/slite
+	Theme           string  `json:"theme"`           // "system" | "yellow" | "gray" | "dark"
+	AlwaysOnTop     bool    `json:"alwaysOnTop"`
+	Hotkey          string  `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
+	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
+	DataDir         string  `json:"dataDir"`         // "" = default os.UserConfigDir()/slite
+	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
 }
 
 const notesFileVersion = 1
@@ -162,10 +163,17 @@ func (s *Store) LoadSettings() (Settings, error) {
 }
 
 // SaveSettings persists settings and applies window-level side effects
-// (always-on-top, auto-start). DataDir is managed exclusively by SetDataDir.
+// (always-on-top, window opacity, auto-start). DataDir is managed
+// exclusively by SetDataDir.
 func (s *Store) SaveSettings(settings Settings) error {
 	if settings.Theme == "" {
-		settings.Theme = "yellow"
+		settings.Theme = "system"
+	}
+	// Defensive clamp for the opacity slider.
+	if settings.Opacity < 0.3 {
+		settings.Opacity = 1
+	} else if settings.Opacity > 1 {
+		settings.Opacity = 1
 	}
 	s.mu.Lock()
 	prev := s.settings
@@ -187,6 +195,9 @@ func (s *Store) SaveSettings(settings Settings) error {
 	}
 	if mainWindow != nil {
 		mainWindow.SetAlwaysOnTop(settings.AlwaysOnTop)
+		if err := setWindowOpacity(settings.Opacity); err != nil {
+			log.Printf("slite: set opacity: %v", err)
+		}
 	}
 	return nil
 }
@@ -396,7 +407,7 @@ func (s *Store) getLaunchAtStartup() bool {
 }
 
 func (s *Store) readSettingsFile(path string) Settings {
-	settings := Settings{Theme: "yellow"}
+	settings := Settings{Theme: "system"}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return settings
@@ -405,7 +416,7 @@ func (s *Store) readSettingsFile(path string) Settings {
 		return settings
 	}
 	if settings.Theme == "" {
-		settings.Theme = "yellow"
+		settings.Theme = "system"
 	}
 	return settings
 }

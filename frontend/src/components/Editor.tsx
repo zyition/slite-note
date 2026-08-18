@@ -13,6 +13,12 @@ interface EditorProps {
 /**
  * Editor — BlockNote core wrapper. Remounts per note (App keys it by note id)
  * so switching notes reloads `initialContent` cleanly.
+ *
+ * Click-to-focus: BlockNote only renders as tall as its content, so clicking
+ * the empty area below the last block does nothing by default. We listen for
+ * clicks that land *outside* any block (`.bn-block`) and move the cursor to
+ * the end of the document instead — the classic "tap below to keep typing"
+ * behaviour.
  */
 export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
   const editor = useCreateBlockNote({
@@ -21,12 +27,25 @@ export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
       | undefined,
   });
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    // Clicks inside a block (text, list items, …) keep the default behaviour.
+    if (target.closest(".bn-block")) return;
+    // Clicks on the empty area below the content jump to the last block end.
+    const blocks = editor.document;
+    if (!blocks.length) return;
+    editor.focus();
+    editor.setTextCursorPosition(blocks[blocks.length - 1], "end");
+  };
+
   return (
-    <BlockNoteView
-      editor={editor}
-      theme={blocknoteTheme}
-      onChange={() => onChange(editor.document)}
-      data-testid="slite-editor"
-    />
+    <div className="h-full" onMouseDown={handleMouseDown}>
+      <BlockNoteView
+        editor={editor}
+        theme={blocknoteTheme}
+        onChange={() => onChange(editor.document)}
+        data-testid="slite-editor"
+      />
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FolderOpen, FolderSearch, Keyboard, Loader2, Power, X } from "lucide-react";
+import { Check, Droplets, FolderOpen, FolderSearch, Keyboard, Loader2, Power, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { t } from "../services/i18n";
 import { formatCombo, displayCombo } from "../services/hotkey";
@@ -150,6 +150,9 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
 
   if (!open) return null;
 
+  // Backwards-compatible opacity: unset (0 / missing) means fully opaque.
+  const opacityValue = settings.opacity && settings.opacity >= 0.3 ? settings.opacity : 1;
+
   const sectionLabel =
     "mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]";
   const primaryBtn =
@@ -242,6 +245,29 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
             <span className="ml-2 align-middle text-[11px]">
               {settings.launchAtStartup ? "On" : "Off"}
             </span>
+          </section>
+
+          {/* Window opacity */}
+          <section>
+            <div className={sectionLabel}>
+              <Droplets size={11} /> {t.opacitySection}
+            </div>
+            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.opacityDesc}</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0.35}
+                max={1}
+                step={0.05}
+                value={opacityValue}
+                onChange={(e) => onChanged({ ...settings, opacity: Number(e.target.value) })}
+                className="flex-1 accent-[var(--accent)]"
+                aria-label={t.opacitySection}
+              />
+              <span className="w-10 text-right text-[11px] tabular-nums">
+                {Math.round(opacityValue * 100)}%
+              </span>
+            </div>
           </section>
 
           {/* Data location */}

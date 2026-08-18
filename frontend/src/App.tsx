@@ -6,7 +6,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
 import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
 import { deriveTitle } from "./services/title";
-import { THEMES, cycleTheme as nextThemeName } from "./services/theme";
+import { THEMES, resolveTheme, cycleTheme as nextThemeName, onSystemThemeChange } from "./services/theme";
 import { t } from "./services/i18n";
 import {
   loadNotes,
@@ -61,13 +61,22 @@ export default function App() {
 
   /* ---------------- theme side effects ---------------- */
 
+  // Bump when the OS dark-mode preference changes so "system" re-resolves.
+  const [themeTick, setThemeTick] = useState(0);
+  useEffect(() => onSystemThemeChange(() => setThemeTick((t) => t + 1)), []);
+
+  const appliedTheme = useMemo(() => {
+    const choice = (THEME_NAMES.includes(settings.theme as ThemeName)
+      ? settings.theme
+      : "system") as ThemeName;
+    return resolveTheme(choice);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.theme, themeTick]);
+
   useEffect(() => {
-    const theme = THEME_NAMES.includes(settings.theme as ThemeName)
-      ? (settings.theme as ThemeName)
-      : "yellow";
-    document.documentElement.dataset.theme = theme;
-    void setWindowBackground(...THEMES[theme].rgb);
-  }, [settings.theme]);
+    document.documentElement.dataset.theme = appliedTheme;
+    void setWindowBackground(...THEMES[appliedTheme].rgb);
+  }, [appliedTheme]);
 
   /* ---------------- persistence ---------------- */
 
@@ -182,9 +191,6 @@ export default function App() {
   }, [notes, titleFor]);
 
   const activeNote = notes.find((n) => n.id === activeId) ?? null;
-  const theme = (THEME_NAMES.includes(settings.theme as ThemeName)
-    ? settings.theme
-    : "yellow") as ThemeName;
 
   /* ---------------- render ---------------- */
 
@@ -213,7 +219,7 @@ export default function App() {
           <Editor
             key={activeNote.id}
             note={activeNote}
-            blocknoteTheme={THEMES[theme].blocknote}
+            blocknoteTheme={THEMES[appliedTheme].blocknote}
             onChange={updateActiveBlocks}
           />
         )}

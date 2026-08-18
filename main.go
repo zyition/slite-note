@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"golang.org/x/sys/windows"
 )
 
 // Wails embeds the built frontend into the binary (frontend/dist is produced by
@@ -32,7 +33,8 @@ func init() {
 
 const (
 	defaultHotkey = "Alt+Shift+S"
-	defaultWidth  = 360
+	initialWidth  = 480 // startup width; adjusted to 1/3 of the screen in positionWindowAtStartup
+	minWidth      = 320
 )
 
 // activeHotkey is the currently registered toggle accelerator; empty while
@@ -97,7 +99,7 @@ func main() {
 	settings := store.currentSettings()
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "slite",
-		Width:            defaultWidth,
+		Width:            initialWidth,
 		Height:           480,
 		MinWidth:         280,
 		MinHeight:        320,
@@ -138,6 +140,14 @@ func main() {
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		positionWindowAtStartup()
+		// Apply the persisted window opacity once the window exists.
+		op := store.currentSettings().Opacity
+		if op < opacityFloor || op > 1 {
+			op = 1 // unset or out of range: fully opaque
+		}
+		if err := setWindowOpacity(op); err != nil {
+			debugLog("set opacity failed: %v", err)
+		}
 		setupTray()
 		mainWindow.Show()
 		mainWindow.Focus()
@@ -232,7 +242,7 @@ func resumeToggleHotkey() error {
 }
 
 // positionWindowAtStartup places the window at the left edge of the primary
-// screen's work area, full height, with the MVP default width.
+// screen's work area, full height, with a width of one third of the screen.
 func positionWindowAtStartup() {
 	screen := app.Screen.GetPrimary()
 	if screen == nil {
@@ -240,8 +250,68 @@ func positionWindowAtStartup() {
 		return
 	}
 	wa := screen.WorkArea
+	width := wa.Width / 3
+	if width < minWidth {
+		width = minWidth
+	}
 	mainWindow.SetPosition(wa.X, wa.Y)
-	mainWindow.SetSize(defaultWidth, wa.Height)
+	mainWindow.SetSize(width, wa.Height)
+}
+
+// --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
+//
+// Wails v3 has no opacity API, so we drive the window through user32 directly.
+// alpha must be in (0, 1]; values below 0.05 remove the layered style (fully
+// opaque). The whole window — WebView2 content included — is affected.
+
+var (
+	user32              = windows.NewLazySystemDLL("user32.dll")
+	procSetLayeredAttrs = user32.NewProc("SetLayeredWindowAttributes")
+	procGetWindowLong   = user32.NewProc("GetWindowLongPtrW")
+	procSetWindowLong   = user32.NewProc("SetWindowLongPtrW")
+)
+
+const (
+	gwlExStyle   = int(-20)
+	wsExLayered  = 0x00080000
+	lwaAlpha     = 0x00000002
+	opacityMin   = 0.05
+	opacityFloor = 0.3 // UI slider minimum; anything below means "not set"
+)
+
+// gwlExStylePtr is the runtime-converted nIndex (GWLP_EXSTYLE = -20) for
+// GetWindowLongPtrW/SetWindowLongPtrW (uintptr rejects negative constants).
+var (
+	gwlExStyleVar int = -20
+	gwlExStylePtr     = uintptr(gwlExStyleVar)
+)
+
+// setWindowOpacity applies a whole-window alpha (1 = fully opaque). A value of
+// 0 or >= 1 removes the layered style entirely to avoid any DWM side effects.
+func setWindowOpacity(alpha float64) error {
+	if mainWindow == nil {
+		return nil
+	}
+	hwnd := uintptr(mainWindow.NativeWindow())
+	if hwnd == 0 {
+		return nil
+	}
+	exStyle, _, _ := procGetWindowLong.Call(hwnd, gwlExStylePtr)
+	if alpha <= 0 || alpha >= 1 {
+		if exStyle&wsExLayered != 0 {
+			procSetWindowLong.Call(hwnd, gwlExStylePtr, exStyle&^wsExLayered)
+		}
+		return nil
+	}
+	if alpha < opacityMin {
+		alpha = opacityMin
+	}
+	procSetWindowLong.Call(hwnd, gwlExStylePtr, exStyle|wsExLayered)
+	_, _, err := procSetLayeredAttrs.Call(hwnd, 0, uintptr(byte(alpha*255+0.5)), lwaAlpha)
+	if err != nil && err != windows.ERROR_SUCCESS {
+		return err
+	}
+	return nil
 }
 
 // setupTray creates the system tray icon with a menu (Show/Hide, Quit). Left

@@ -39,6 +39,8 @@ const en = {
   migrateDone: "Done — notes moved, slite now uses the new folder.",
   nativeOnly: "Only available in the desktop app.",
   cancel: "Cancel",
+  opacitySection: "Window opacity",
+  opacityDesc: "Make the window see-through. 100% is fully opaque.",
 };
 
 export const t: typeof en = en;

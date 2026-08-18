@@ -7,9 +7,9 @@ import type { Note, Settings } from "../../bindings/slite";
 
 export type { Note, Settings };
 
-export type ThemeName = "yellow" | "gray" | "dark";
+export type ThemeName = "system" | "yellow" | "gray" | "dark";
 
-export const THEME_NAMES: ThemeName[] = ["yellow", "gray", "dark"];
+export const THEME_NAMES: ThemeName[] = ["yellow", "gray", "dark", "system"];
 
 /** UUID with a fallback for insecure origins (crypto.randomUUID needs a
  * secure context; the browser-fallback mode may run on plain http). */
@@ -37,11 +37,12 @@ export function makeNote(): Note {
 
 export function makeSettings(partial?: Partial<Settings>): Settings {
   return {
-    theme: "yellow",
+    theme: "system",
     alwaysOnTop: false,
     hotkey: "Alt+Shift+S",
     launchAtStartup: false,
     dataDir: "",
+    opacity: 1,
     ...partial,
   };
 }
