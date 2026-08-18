@@ -65,6 +65,16 @@ var (
 	store      *Store
 )
 
+// webviewDataPath returns a tidy WebView2 user-data location (%LOCALAPPDATA%
+// /slite/webview), or "" to let the runtime pick a default when LocalAppData
+// is unavailable.
+func webviewDataPath() string {
+	if d, err := os.UserCacheDir(); err == nil && d != "" {
+		return filepath.Join(d, "slite", "webview")
+	}
+	return ""
+}
+
 func main() {
 	store = NewStore()
 
@@ -76,6 +86,11 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+		},
+		Windows: application.WindowsOptions{
+			// Default is %APPDATA%/<exe>.exe which is both ugly and roaming;
+			// put WebView2's user data (EBWebView cache) under LocalAppData.
+			WebviewUserDataPath: webviewDataPath(),
 		},
 	})
 
@@ -257,7 +272,10 @@ func setupTray() {
 	})
 	tray.SetMenu(menu)
 	tray.OnClick(toggleWindow)
-	tray.Run()
+	// NOTE: do NOT call tray.Run() here — SystemTray.New() already runs the
+	// tray when the app is running (runOrDeferToAppRun), and a second Run()
+	// re-adds the icon (ShellNotifyIcon NIM_ADD) producing a duplicate tray
+	// icon.
 }
 
 // toggleWindow shows or hides the main window (hotkey, tray click, tray menu).

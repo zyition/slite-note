@@ -11,7 +11,6 @@ import {
   setDataDir,
   setHotkey,
   suspendHotkey,
-  validateDataDir,
 } from "../services/bridge";
 
 interface SettingsPanelProps {
@@ -21,12 +20,6 @@ interface SettingsPanelProps {
   /** Persist a settings change (App updates state + saves). */
   onChanged: (next: Settings) => void;
 }
-
-type DirCheck =
-  | { status: "idle" }
-  | { status: "checking" }
-  | { status: "ok" }
-  | { status: "error"; message: string };
 
 /**
  * SettingsPanel — modal overlay reached from the title bar gear or the tray
@@ -41,10 +34,8 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [dataDir, setDataDirDisplay] = useState(settings.dataDir || "…");
-  const [pickedDir, setPickedDir] = useState<string | null>(null);
-  const [dirCheck, setDirCheck] = useState<DirCheck>({ status: "idle" });
-  const [migrating, setMigrating] = useState(false);
-  const [migrated, setMigrated] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [migrateMsg, setMigrateMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Tracks whether the toggle hotkey is currently suspended (recording active).
   const suspendedRef = useRef(false);
@@ -54,9 +45,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
   useEffect(() => {
     if (!open) return;
     setHotkeyError(null);
-    setMigrated(false);
-    setDirCheck({ status: "idle" });
-    setPickedDir(null);
+    setMigrateMsg(null);
     currentDataDir()
       .then(setDataDirDisplay)
       .catch(() => {});
@@ -136,34 +125,28 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
 
   /* ---------- data dir ---------- */
 
-  const handlePickDir = useCallback(async () => {
-    setMigrated(false);
+  // Pick a folder in the native dialog, then move data there directly
+  // (pre-checks run inside SetDataDir; failures surface as a red message).
+  const handleMoveData = useCallback(async () => {
+    setMigrateMsg(null);
+    setMoving(true);
     try {
       const dir = await chooseDataDir();
-      if (!dir) return; // user cancelled
-      setPickedDir(dir);
-      setDirCheck({ status: "checking" });
-      const err = await validateDataDir(dir);
-      setDirCheck(err ? { status: "error", message: err } : { status: "ok" });
+      if (!dir) return; // user cancelled — keep the panel quiet
+      const err = await setDataDir(dir);
+      if (err) {
+        setMigrateMsg({ ok: false, text: err });
+        return;
+      }
+      const d = await currentDataDir().catch(() => "");
+      if (d) setDataDirDisplay(d);
+      setMigrateMsg({ ok: true, text: t.migrateDone });
     } catch (err) {
-      setDirCheck({ status: "error", message: String((err as Error)?.message ?? err) });
+      setMigrateMsg({ ok: false, text: String((err as Error)?.message ?? err) });
+    } finally {
+      setMoving(false);
     }
   }, []);
-
-  const handleMigrate = useCallback(async () => {
-    if (!pickedDir) return;
-    setMigrating(true);
-    const err = await setDataDir(pickedDir);
-    setMigrating(false);
-    if (err) {
-      setDirCheck({ status: "error", message: err });
-      return;
-    }
-    const dir = await currentDataDir().catch(() => "");
-    if (dir) setDataDirDisplay(dir);
-    setMigrated(true);
-    setDirCheck({ status: "idle" });
-  }, [pickedDir]);
 
   if (!open) return null;
 
@@ -270,45 +253,27 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
             <div className="mb-1.5 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
               {dataDir}
             </div>
-            <button className={secondaryBtn} onClick={() => void openDataDir()}>
-              <FolderOpen size={11} /> {t.openExplorer}
-            </button>
-
-            <div className="mt-3 border-t border-[var(--border)] pt-3">
-              <div className="mb-1.5 text-[11px] font-medium">{t.changeLocationTitle}</div>
-              <button className={secondaryBtn} onClick={() => void handlePickDir()}>
-                <FolderSearch size={11} /> {t.chooseFolder}
+            <div className="flex gap-1.5">
+              <button className={secondaryBtn} onClick={() => void openDataDir()}>
+                <FolderOpen size={11} /> {t.openExplorer}
               </button>
-
-              {pickedDir && (
-                <div className="mt-2 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
-                  {pickedDir}
-                </div>
-              )}
-              {dirCheck.status === "checking" && (
-                <p className="mt-2 flex items-center gap-1 text-[10px] text-[var(--fg-muted)]">
-                  <Loader2 size={11} className="animate-spin" /> {t.checkDir}…
-                </p>
-              )}
-              {dirCheck.status === "ok" && (
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
-                    <Check size={11} /> {t.checkDirOk}
-                  </span>
-                  <button className={primaryBtn} onClick={() => void handleMigrate()} disabled={migrating}>
-                    {migrating ? <Loader2 size={11} className="animate-spin" /> : t.migrateHere}
-                  </button>
-                </div>
-              )}
-              {dirCheck.status === "error" && (
-                <p className="mt-2 text-[10px] text-red-500">{dirCheck.message}</p>
-              )}
-              {migrated && (
-                <p className="mt-2 flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
-                  <Check size={11} /> {t.migrateDone}
-                </p>
-              )}
+              <button className={secondaryBtn} onClick={() => void handleMoveData()} disabled={moving}>
+                {moving ? <Loader2 size={11} className="animate-spin" /> : <FolderSearch size={11} />}
+                {t.moveData}
+              </button>
             </div>
+            {migrateMsg && (
+              <p
+                className={`mt-2 text-[10px] ${
+                  migrateMsg.ok
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-red-500"
+                }`}
+              >
+                {migrateMsg.ok && <Check size={11} className="mr-1 inline" />}
+                {migrateMsg.text}
+              </p>
+            )}
           </section>
         </div>
       </div>
