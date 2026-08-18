@@ -4,7 +4,7 @@
  */
 
 const en = {
-  appName: "slite",
+  appName: "slite-note",
   untitled: "Untitled",
   newNote: "New note",
   notes: "Notes",
@@ -41,6 +41,14 @@ const en = {
   cancel: "Cancel",
   opacitySection: "Window opacity",
   opacityDesc: "Make the window see-through. 100% is fully opaque.",
+
+  // About section
+  aboutSection: "About",
+  versionLabel: "Version",
+  homepageLabel: "Homepage",
+  licenseLabel: "License",
+  aboutDesc:
+    "slite-note = slide + lite. A minimal sticky note that glides in and out. Built with Wails, BlockNote, React, Tailwind and lucide.",
 };
 
 export const t: typeof en = en;

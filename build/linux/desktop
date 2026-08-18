@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A slite application
+Name=slite-note
+Comment=A minimal sticky-note desktop app with block-based rich text
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/slite.exe %u
+Exec=/usr/local/bin/slite-note %u
 Terminal=false
 Type=Application
-Icon=slite.exe
+Icon=slite-note
 Categories=Utility;
-StartupWMClass=slite.exe
+StartupWMClass=slite-note
 
  

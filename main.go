@@ -90,7 +90,7 @@ func main() {
 	store = NewStore()
 
 	app = application.New(application.Options{
-		Name:        "slite",
+		Name:        "slite-note",
 		Description: "A minimal desktop sticky notes app",
 		Services: []application.Service{
 			application.NewService(store),
@@ -107,7 +107,7 @@ func main() {
 
 	settings := store.currentSettings()
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "slite",
+		Title:            "slite-note",
 		Width:            initialWidth,
 		Height:           480,
 		MinWidth:         280,
@@ -397,8 +397,8 @@ func applyOpacityOnWindowChanges() {
 func setupTray() {
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
-	tray.SetTooltip("slite")
-	tray.SetLabel("slite")
+	tray.SetTooltip("slite-note")
+	tray.SetLabel("slite-note")
 
 	menu := app.NewMenu()
 	menu.Add("Show/Hide").OnClick(func(ctx *application.Context) {

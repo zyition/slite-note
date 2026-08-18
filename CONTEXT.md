@@ -17,15 +17,19 @@ Note 的显示名。默认取首行文本截断；手动覆盖为后续迭代能
 _Avoid_: 标题字段, heading
 
 **Theme**:
-全局（非每便签）的配色方案：便签黄 / 极简灰 / 深色。
+全局（非每便签）的配色方案：跟随系统深/浅色（system），或固定便签黄（yellow）。
 _Avoid_: skin, mode
 
 **Always on Top**:
 窗口置顶状态，由顶栏图钉切换，跨重启持久化。
 _Avoid_: pin（作为名词）, 钉住
 
+**Opacity**:
+窗口透明度（50–100%），设置页滑块调节，经 Win32 `WS_EX_LAYERED` 应用并持久化。
+_Avoid_: alpha, 不透明度（作为设置项名）
+
 **Global Hotkey**:
-系统级快捷键 `Alt+Shift+S`，切换窗口显示/隐藏，应用无需聚焦。
+系统级快捷键（默认 `Alt+Shift+S`，可配置），切换窗口显示/隐藏，应用无需聚焦。
 _Avoid_: shortcut（作为系统级概念）, 快捷键
 
 **Tray**:
@@ -36,17 +40,25 @@ _Avoid_: 托盘图标（仅指图标）, notification area
 关闭按钮将窗口隐藏（应用驻留后台）；Global Hotkey 或 Tray 唤起窗口。
 _Avoid_: minimize（与系统最小化混淆）, 最小化
 
+**Silent Launch**:
+以 `--silent` 参数启动（开机自启动场景）：窗口定位但不显示，由 Global Hotkey/Tray 唤起。
+_Avoid_: 静默模式（与日志静默混淆）, background start
+
 **Auto-save**:
 编辑内容防抖 800ms 后写入本地存储的机制。
 
 **Store**:
-Note 数据持久化抽象层（接口），MVP 为单文件实现，未来可替换为 Vault 实现。
+Note 数据持久化抽象层（接口），当前为单文件实现，未来可替换为 Vault 实现。
 _Avoid_: storage（与浏览器 localStorage 混淆）, 存储
+
+**Data Directory**:
+Note 与 Settings 的存储目录（默认 `%APPDATA%\slite`），可在设置页通过 "Change location…" 迁移。
+_Avoid_: data dir（作为领域词，裸词）, 数据文件夹
 
 **Vault**:
 （未来能力）可配置数据目录、每 Note 一个文件的存储形态，类似 Obsidian vault。
 _Avoid_: 仓库, data dir（作为领域词）
 
 **Settings**:
-应用级偏好持久化（当前含 Theme 与 Always on Top 状态），存于 settings.json。
-_Avoid_: config, 设置页（页面为 UI 概念，后续迭代）
+应用级偏好持久化（Theme、Always on Top、Opacity、Global Hotkey、Silent Launch、Data Directory），存于 settings.json。
+_Avoid_: config, 设置页（页面为 UI 概念）

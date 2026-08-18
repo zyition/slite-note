@@ -19,6 +19,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * AppVersion returns the user-facing version string for the About section.
+ */
+export function AppVersion(): $CancellablePromise<string> {
+    return $Call.ByID(594851662);
+}
+
+/**
  * ChooseDataDir opens the native folder picker and returns the selected path,
  * or "" when the user cancels. Error in browser fallback mode.
  */
@@ -54,6 +61,14 @@ export function LoadSettings(): $CancellablePromise<$models.Settings> {
  */
 export function OpenDataDir(): $CancellablePromise<void> {
     return $Call.ByID(11373138);
+}
+
+/**
+ * OpenURL opens a URL in the user's default browser (Windows ShellExecute).
+ * Used by the About section's links; WebView2 does not follow external links.
+ */
+export function OpenURL(url: string): $CancellablePromise<void> {
+    return $Call.ByID(547634812, url);
 }
 
 /**

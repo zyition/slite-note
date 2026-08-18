@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+	"unsafe"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -31,6 +34,10 @@ type Settings struct {
 	DataDir         string  `json:"dataDir"`         // "" = default os.UserConfigDir()/slite
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
 }
+
+// appVersion is the user-facing version shown in the About section; it must
+// stay in sync with the version in build/config.yml and package.json.
+const appVersion = "0.1.0"
 
 const notesFileVersion = 1
 
@@ -124,6 +131,34 @@ func (s *Store) Ping() string {
 	return "pong"
 }
 
+// AppVersion returns the user-facing version string for the About section.
+func (s *Store) AppVersion() string {
+	return appVersion
+}
+
+// OpenURL opens a URL in the user's default browser (Windows ShellExecute).
+// Used by the About section's links; WebView2 does not follow external links.
+func (s *Store) OpenURL(url string) error {
+	if url == "" {
+		return fmt.Errorf("empty url")
+	}
+	shell := windows.NewLazySystemDLL("shell32.dll")
+	proc := shell.NewProc("ShellExecuteW")
+	u, err := windows.UTF16PtrFromString(url)
+	if err != nil {
+		return err
+	}
+	op, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return err
+	}
+	r, _, _ := proc.Call(0, uintptr(unsafe.Pointer(op)), uintptr(unsafe.Pointer(u)), 0, 0, 1) // SW_SHOWNORMAL
+	if r <= 32 {
+		return fmt.Errorf("ShellExecute failed: %d", r)
+	}
+	return nil
+}
+
 // LoadNotes reads all notes from disk. Returns an empty slice if the file does
 // not exist yet.
 func (s *Store) LoadNotes() ([]Note, error) {
@@ -138,7 +173,16 @@ func (s *Store) LoadNotes() ([]Note, error) {
 	}
 	var f notesFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parse notes: %w", err)
+		// Corrupt notes file: back it up (never destroy user data), then start
+		// fresh so the app still boots. The backup keeps the original bytes for
+		// manual recovery.
+		backup := filepath.Join(s.dataDir, "notes.json.corrupt-"+time.Now().Format("20060102-150405"))
+		if rerr := os.WriteFile(backup, data, 0o644); rerr != nil {
+			log.Printf("slite: failed to back up corrupt notes file: %v", rerr)
+		} else {
+			log.Printf("slite: notes.json corrupt (%v); backed up to %s and starting fresh", err, backup)
+		}
+		return []Note{}, nil
 	}
 	if f.Notes == nil {
 		f.Notes = []Note{}
@@ -381,7 +425,7 @@ func (s *Store) setLaunchAtStartup(enabled bool) error {
 		defer k.Close()
 		// --silent: auto-start must not pop the window; the tray/hotkey
 		// summon it when needed.
-		if err := k.SetStringValue("slite", `"`+exe+`" --silent`); err != nil {
+		if err := k.SetStringValue("slite-note", `"`+exe+`" --silent`); err != nil {
 			return fmt.Errorf("write run key: %w", err)
 		}
 		return nil
@@ -391,7 +435,7 @@ func (s *Store) setLaunchAtStartup(enabled bool) error {
 		return fmt.Errorf("open run key: %w", err)
 	}
 	defer k.Close()
-	if err := k.DeleteValue("slite"); err != nil && err != registry.ErrNotExist {
+	if err := k.DeleteValue("slite-note"); err != nil && err != registry.ErrNotExist {
 		return fmt.Errorf("delete run key: %w", err)
 	}
 	return nil

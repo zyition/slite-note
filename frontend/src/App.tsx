@@ -32,6 +32,17 @@ export default function App() {
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Show a dismissible banner when persistence fails (disk full, permission…)
+  // and auto-clear it after a few seconds.
+  const reportSaveError = useCallback((e: unknown) => {
+    console.error(t.saveFailed, e);
+    setSaveError(String((e as Error)?.message ?? e));
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setSaveError(null), 4000);
+  }, []);
 
   /* ---------------- boot ---------------- */
 
@@ -84,16 +95,16 @@ export default function App() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      saveNotes(notesRef.current).catch((e) => console.error(t.saveFailed, e));
+      saveNotes(notesRef.current).catch(reportSaveError);
     }, SAVE_DEBOUNCE_MS);
-  }, []);
+  }, [reportSaveError]);
 
   const flushSave = useCallback(() => {
     if (!saveTimer.current) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = null;
-    saveNotes(notesRef.current).catch((e) => console.error(t.saveFailed, e));
-  }, []);
+    saveNotes(notesRef.current).catch(reportSaveError);
+  }, [reportSaveError]);
 
   // Flush pending saves when the window hides or the app quits.
   useEffect(() => {
@@ -148,10 +159,13 @@ export default function App() {
     [activeId, scheduleSave],
   );
 
-  const persistSettings = useCallback((next: Settings) => {
-    setSettings(next);
-    saveSettings(next).catch((e) => console.error(t.saveFailed, e));
-  }, []);
+  const persistSettings = useCallback(
+    (next: Settings) => {
+      setSettings(next);
+      saveSettings(next).catch(reportSaveError);
+    },
+    [reportSaveError],
+  );
 
   // Tray menu → Settings… opens the panel (and the panel itself closes via ✕).
   useEffect(() => {
@@ -161,18 +175,18 @@ export default function App() {
   const cycleTheme = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, theme: nextThemeName(prev.theme as ThemeName) };
-      saveSettings(next).catch((e) => console.error(t.saveFailed, e));
+      saveSettings(next).catch(reportSaveError);
       return next;
     });
-  }, []);
+  }, [reportSaveError]);
 
   const togglePin = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, alwaysOnTop: !prev.alwaysOnTop };
-      saveSettings(next).catch((e) => console.error(t.saveFailed, e));
+      saveSettings(next).catch(reportSaveError);
       return next;
     });
-  }, []);
+  }, [reportSaveError]);
 
   const hide = useCallback(() => {
     flushSave();
@@ -230,6 +244,16 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onChanged={persistSettings}
       />
+      {saveError && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-2 z-[110] flex justify-center">
+          <div
+            role="alert"
+            className="rounded-md bg-red-600 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg"
+          >
+            {t.saveFailed}: {saveError}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

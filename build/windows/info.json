@@ -5,11 +5,11 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A slite application",
-			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"CompanyName": "zyition",
+			"FileDescription": "A minimal sticky-note desktop app with block-based rich text",
+			"LegalCopyright": "(c) 2025, zyition",
+			"ProductName": "slite-note",
+			"Comments": "slide + lite: a minimal sticky note that glides in and out"
 		}
 	}
 }

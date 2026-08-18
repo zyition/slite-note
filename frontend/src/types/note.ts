@@ -1,9 +1,9 @@
 /**
- * Domain types (mirror of the Go bindings in ../bindings/slite/models.ts).
+ * Domain types (mirror of the Go bindings in ../bindings/github.com/zyition/slite-note/models.ts).
  * Kept here so components don't import generated bindings directly and the
  * browser fallback can construct the same shapes from localStorage.
  */
-import type { Note, Settings } from "../../bindings/slite";
+import type { Note, Settings } from "../../bindings/github.com/zyition/slite-note";
 
 export type { Note, Settings };
 

@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  lint-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install wails3 CLI
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          echo "$(go env GOPATH)/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Frontend type check
+        working-directory: frontend
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc --noEmit
+
+      - name: Go vet
+        run: go vet .
+
+      - name: wails build
+        env:
+          PACKAGE_MANAGER: pnpm
+        run: wails3 build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slite-note-windows-amd64
+          path: bin/slite-note.exe
+          if-no-files-found: error

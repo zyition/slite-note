@@ -1,77 +1,116 @@
-# slite
+# slite-note
 
-极简桌面便签应用：单窗口承载 BlockNote 块级富文本编辑，本地持久化，窗口支持隐藏/唤起与全局快捷键。
+A minimal sticky-note desktop app for Windows. One slim window hosts a
+block-based rich-text editor (BlockNote); notes are stored locally as a single
+JSON file. The window hides and summons with a global hotkey — an always-ready
+scratchpad that stays out of your way.
 
-## 技术栈
+> **slite-note** = *slide* + *lite*: a lightweight sticky note that glides in
+> and out. (The slide animation is on the roadmap.)
+> This project is not affiliated with [slite.com](https://slite.com).
 
-| 层 | 选型 | 说明 |
-|---|---|---|
-| 桌面容器 | **Wails v3** (v3.0.0-beta.9) | 见 [ADR-0001](./docs/adr/0001-wails-v3-instead-of-neutralino.md)：req.md 原定 Neutralino 不支持全局快捷键（核心需求），Wails v3 内置 GlobalShortcut + SystemTray，Windows 构建纯 Go 零 CGO |
-| 前端 | Vite 8 + React 19 + TypeScript + Tailwind v4 | CSS-first 配置，无 tailwind.config.js |
-| 编辑器 | BlockNote 0.54 (`@blocknote/mantine`) | 斜杠菜单 / 拖拽手柄 / 气泡工具栏 / Markdown 快捷键 |
-| 图标 | lucide-react | |
+[中文说明](./README.zh-CN.md)
 
-## 功能
+## Features
 
-- **窗口**：无边框自绘标题栏（40px，中部拖拽区）、默认 360 宽、首次启动左贴边全高、可自由调整尺寸
-- **图钉**：置顶切换，跨重启持久化（settings.json）
-- **3 主题**：便签黄 / 极简灰 / 深色，顶栏循环切换，持久化
-- **全局热键**：`Alt+Shift+S` 切换窗口显隐（应用无需聚焦，核心功能）
-- **关闭 = 隐藏**：应用驻留后台，托盘（显示/隐藏、退出）+ 热键唤回
-- **编辑器**：BlockNote 全套（`/` 斜杠菜单、待办 Check List、代码块、引用等）
-- **自动保存**：编辑防抖 800ms 写入本地
-- **多便签**：顶栏下拉切换、新建
-- **标题**：默认取首行文本截断；`Note.title` 字段预留手动覆盖（MVP 未做 UI）
-- **浏览器降级**：无 Wails 运行时自动用 localStorage + no-op 窗口控制，可直接 `pnpm dev` 调试 UI
+- **Global hotkey** (`Alt+Shift+S` by default, reconfigurable) toggles the
+  window from anywhere — no focus needed
+- **Close = hide**: the app stays resident in the system tray; quit from the
+  tray menu
+- **Always on top** pin, **opacity** (50–100%), theme following the OS light /
+  dark mode (or a manual sticky-note yellow)
+- **Silent auto-start**: optional launch at sign-in without popping the window
+- **Block editor**: BlockNote — `/` slash menu, checklists, headings, quotes,
+  code blocks, drag-to-reorder, bubble toolbar
+- **Auto-save** (800ms debounce) to a single local file
+- **Multiple notes** via the title-bar picker; delete from the note menu
+- **Relocatable data**: move your notes folder from the settings panel
+- **Zero telemetry**: everything stays on your machine
 
-## 数据位置
+## Install
 
-- 便签：`%APPDATA%\slite\notes.json`（单文件，`Store` 接口抽象，未来可换 vault 形态，见 [ADR-0002](./docs/adr/0002-mvp-single-file-store-behind-interface.md)）
-- 设置：`%APPDATA%\slite\settings.json`（主题、置顶）
+- **Windows 10/11** with the [WebView2 runtime]
+  (preinstalled on most systems; the installer bundles it when missing).
 
-## 开发
+### Options
 
-工具链：Windows 侧 mise 管理（node / pnpm / go），Go 模块走 goproxy.cn，npm 走 npmmirror（见 `frontend/.npmrc`）。
+| Channel | How |
+|---|---|
+| GitHub Releases | `slite-note-setup.exe` (NSIS installer) or portable `slite-note-<ver>-windows-amd64.zip` |
+| From source | see [Building](#building) |
+
+> The portable zip needs WebView2 already installed. The installer will set it
+> up automatically on older machines.
+
+## Building
+
+Toolchain: Go 1.25+, Node/pnpm, and the [Wails v3 CLI].
 
 ```bash
-# 安装 wails3 CLI（写入 %USERPROFILE%\.local\bin）
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
-
-# 前端依赖
-cd frontend && pnpm install
-
-# 桌面运行（wails dev，Vite HMR）
-wails3 build          # 产物 bin\slite.exe
-
-# 纯浏览器调试 UI（降级模式）
-cd frontend && pnpm dev   # http://localhost:9245
+cd frontend && pnpm install     # frontend deps
+wails3 build                    # → bin/slite-note.exe
 ```
 
-> 构建脚本要求 `PACKAGE_MANAGER=pnpm` 且 PATH 含 mise shims 与 wails3 所在目录：
-> `$env:PATH = "$env:LOCALAPPDATA\mise\shims;$env:USERPROFILE\.local\bin;" + $env:PATH; $env:PACKAGE_MANAGER = 'pnpm'; wails3 build`
+> On Windows, ensure `PACKAGE_MANAGER=pnpm` and `wails3` (plus mise shims) are
+> on `PATH`.
 
-## 结构
+### Browser-only UI development
 
-```
-├── main.go            # Wails 应用：窗口/托盘/热键/事件
-├── store.go           # Store 服务（bindings）：笔记与设置持久化
-├── icons/             # 托盘图标（genicon 生成）
-├── tools/genicon/     # 图标生成器（Go，image/png 绘制）
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx            # 状态编排：boot/保存/主题/新建/切换
-│   │   ├── components/        # TitleBar / NotePicker / Editor
-│   │   ├── services/          # bridge（适配器）/ i18n / theme / title
-│   │   └── types/note.ts      # Note / Settings 领域类型
-│   └── bindings/             # wails3 生成的 TS bindings（勿手改）
-└── docs/adr/          # 决策记录
+Without the Wails runtime the app falls back to `localStorage` + no-op window
+controls, so the UI can be developed in a plain browser:
+
+```bash
+cd frontend && pnpm dev         # http://localhost:9245
 ```
 
-## 路线图（MVP 之后的推迟项）
+## Data
 
-- 删除便签、标题手动覆盖 UI
-- 尺寸/位置记忆（跨重启记住窗口大小位置）
-- vault 存储形态（可配置数据目录、每便签一文件）
-- 设置页（托盘菜单入口）
-- i18n 框架（文案已集中 `src/services/i18n.ts`，英文优先）
-- 退出入口加强（设置页内）
+| What | Where |
+|---|---|
+| Notes | `%APPDATA%\slite\notes.json` (single file, relocatable via Settings → *Change location…*) |
+| Settings | `%APPDATA%\slite\settings.json` |
+| WebView2 data | `%LOCALAPPDATA%\slite\webview` |
+| Logs | `%APPDATA%\slite\log.txt` (debug only) |
+
+## Privacy
+
+slite-note is fully offline. No telemetry, no analytics, no network calls at
+runtime. Your notes never leave your machine.
+
+## Tech stack
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Desktop shell | **Wails v3** | [ADR-0001](./docs/adr/0001-wails-v3-instead-of-neutralino.md) |
+| Frontend | Vite + React 19 + TypeScript + Tailwind v4 | CSS-first, no tailwind config |
+| Editor | BlockNote 0.54 | `/` menu, drag handle, bubble toolbar |
+| Icons | lucide-react | |
+
+## Roadmap
+
+- Slide in/out animation (the "slide" in slite-note)
+- Title override per note (data model ready)
+- Window size/position memory
+- macOS / Linux ports
+- `scoop` / `winget` manifests
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).
+
+## Acknowledgments
+
+Built with [Wails], [BlockNote], [React], [Tailwind CSS] and
+[lucide]. Full third-party notices in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
+## License
+
+[MIT](./LICENSE) © 2025 zyition
+
+[WebView2 runtime]: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+[Wails v3 CLI]: https://wails.io
+[Wails]: https://wails.io
+[BlockNote]: https://www.blocknotejs.org
+[React]: https://react.dev
+[Tailwind CSS]: https://tailwindcss.com
+[lucide]: https://lucide.dev

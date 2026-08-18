@@ -1,4 +1,4 @@
-module slite
+module github.com/zyition/slite-note
 
 go 1.25.0
 

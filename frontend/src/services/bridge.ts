@@ -7,8 +7,8 @@
  * browser mode we fall back to localStorage and no-op window controls.
  */
 import { Events, Window as WailsWindow } from "@wailsio/runtime";
-import { Store } from "../../bindings/slite";
-import type { Note, Settings } from "../../bindings/slite";
+import { Store } from "../../bindings/github.com/zyition/slite-note";
+import type { Note, Settings } from "../../bindings/github.com/zyition/slite-note";
 import { makeSettings } from "../types/note";
 import { t } from "./i18n";
 
@@ -109,6 +109,23 @@ export async function openDataDir(): Promise<void> {
     return;
   }
   throw new Error(t.nativeOnly);
+}
+
+/** App version for the About section ("dev" in browser fallback). */
+export async function appVersion(): Promise<string> {
+  if (await isNative()) {
+    return await Store.AppVersion();
+  }
+  return "dev";
+}
+
+/** Open a URL in the default browser (native) or a new tab (fallback). */
+export async function openUrl(url: string): Promise<void> {
+  if (await isNative()) {
+    await Store.OpenURL(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener");
 }
 
 /** Active data directory path (native); a friendly label in fallback mode. */

@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Droplets, FolderOpen, FolderSearch, Keyboard, Loader2, Power, X } from "lucide-react";
+import { Check, Droplets, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { t } from "../services/i18n";
 import { formatCombo, displayCombo } from "../services/hotkey";
 import {
+  appVersion,
   chooseDataDir,
   currentDataDir,
   openDataDir,
+  openUrl,
   resumeHotkey,
   setDataDir,
   setHotkey,
   suspendHotkey,
 } from "../services/bridge";
+
+const HOME_URL = "https://github.com/zyition/slite-note";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -36,6 +40,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
   const [dataDir, setDataDirDisplay] = useState(settings.dataDir || "…");
   const [moving, setMoving] = useState(false);
   const [migrateMsg, setMigrateMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [version, setVersion] = useState("…");
 
   // Tracks whether the toggle hotkey is currently suspended (recording active).
   const suspendedRef = useRef(false);
@@ -49,6 +54,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
     currentDataDir()
       .then(setDataDirDisplay)
       .catch(() => {});
+    appVersion().then(setVersion).catch(() => {});
   }, [open]);
 
   useEffect(() => {
@@ -300,6 +306,40 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
                 {migrateMsg.text}
               </p>
             )}
+          </section>
+          {/* About */}
+          <section>
+            <div className={sectionLabel}>
+              <Info size={11} /> {t.aboutSection}
+            </div>
+            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.aboutDesc}</p>
+            <div className="mb-1.5 space-y-1 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-[var(--fg-muted)]">{t.versionLabel}</span>
+                <span className="font-semibold">v{version}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--fg-muted)]">{t.homepageLabel}</span>
+                <button
+                  className="font-medium text-[var(--accent)] hover:underline"
+                  onClick={() => void openUrl(HOME_URL)}
+                >
+                  github.com/zyition/slite-note
+                </button>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--fg-muted)]">{t.licenseLabel}</span>
+                <button
+                  className="font-medium text-[var(--accent)] hover:underline"
+                  onClick={() => void openUrl(HOME_URL + "/blob/main/LICENSE")}
+                >
+                  MIT
+                </button>
+              </div>
+            </div>
+            <p className="text-[9px] leading-snug text-[var(--fg-muted)]">
+              © 2025 zyition · Built with Wails, BlockNote, React, Tailwind &amp; lucide.
+            </p>
           </section>
         </div>
       </div>
