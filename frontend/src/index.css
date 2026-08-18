@@ -214,29 +214,58 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Side menu (the per-block handle on the left): wider hit area and a  */
-/* clear three-dash grip instead of the tiny default icon.             */
+/* Side menu (custom Feishu-style handle): a format badge + drag grip. */
 /* ------------------------------------------------------------------ */
 
-.bn-editor .bn-side-menu {
-  width: 30px;
-  height: 28px;
+.slite-side-menu {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.slite-side-menu-badge {
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fg-muted);
+  background: var(--hover);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+.slite-side-menu:hover .slite-side-menu-badge {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+/* Drag handle button: replace the tiny grip icon with clear three dashes. */
+.slite-side-menu button {
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   color: var(--fg-muted);
-  margin-left: -4px; /* nest the handle into the left gutter */
+  cursor: grab;
 }
-.bn-editor .bn-side-menu:hover,
-.bn-editor .bn-side-menu[data-visible="true"] {
+.slite-side-menu button:hover {
   background: var(--hover);
   color: var(--fg);
 }
-.bn-editor .bn-side-menu svg {
+.slite-side-menu button:active {
+  cursor: grabbing;
+}
+.slite-side-menu button svg {
   display: none;
 }
-.bn-editor .bn-side-menu::before {
+.slite-side-menu button::before {
   content: "";
   width: 2.5px;
   height: 13px;
@@ -246,7 +275,7 @@ body {
   opacity: 0.5;
   transition: opacity 0.15s;
 }
-.bn-editor .bn-side-menu:hover::before {
+.slite-side-menu button:hover::before {
   opacity: 0.95;
 }
 

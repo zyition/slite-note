@@ -1,6 +1,7 @@
-import { useCreateBlockNote } from "@blocknote/react";
+import { useCreateBlockNote, SideMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import type { Block, PartialBlock } from "@blocknote/core";
+import { BlockSideMenu } from "./BlockSideMenu";
 import type { Note } from "../types/note";
 
 interface EditorProps {
@@ -50,8 +51,11 @@ export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
         editor={editor}
         theme={blocknoteTheme}
         onChange={() => onChange(editor.document)}
+        sideMenu={false}
         data-testid="slite-editor"
-      />
+      >
+        <SideMenuController sideMenu={BlockSideMenu} />
+      </BlockNoteView>
     </div>
   );
 }
