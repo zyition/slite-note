@@ -214,56 +214,45 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Side menu (custom Feishu-style handle): a format badge + drag grip. */
+/* Side menu (custom drag handle, aligned to the block's first line).  */
 /* ------------------------------------------------------------------ */
 
 .slite-side-menu {
   display: flex;
   align-items: center;
-  gap: 3px;
+  /* Slide the handle into the editor's left gutter so it never covers
+     the text (the popover is anchored at the block content's left edge). */
+  margin-left: -30px;
 }
 
-.slite-side-menu-badge {
-  min-width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  padding: 0 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--fg-muted);
-  background: var(--hover);
-  user-select: none;
-  transition: color 0.15s, background 0.15s;
-}
-.slite-side-menu:hover .slite-side-menu-badge {
-  color: var(--accent-fg);
-  background: var(--accent);
-}
-
-/* Drag handle button: replace the tiny grip icon with clear three dashes. */
-.slite-side-menu button {
+/* Kill the Mantine ActionIcon default (blue filled button) entirely. */
+.slite-side-menu button,
+.slite-side-menu .mantine-ActionIcon-root,
+.slite-side-menu .mantine-UnstyledButton-root {
   width: 24px;
   height: 24px;
+  min-width: 24px;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--fg-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  color: var(--fg-muted);
   cursor: grab;
 }
 .slite-side-menu button:hover {
-  background: var(--hover);
+  background: var(--hover) !important;
   color: var(--fg);
 }
 .slite-side-menu button:active {
   cursor: grabbing;
 }
+
+/* Hide the drag icon; draw a clear three-dash grip instead. */
 .slite-side-menu button svg {
-  display: none;
+  display: none !important;
 }
 .slite-side-menu button::before {
   content: "";
