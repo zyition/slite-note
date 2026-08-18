@@ -379,7 +379,9 @@ func (s *Store) setLaunchAtStartup(enabled bool) error {
 			return fmt.Errorf("open run key: %w", err)
 		}
 		defer k.Close()
-		if err := k.SetStringValue("slite", `"`+exe+`"`); err != nil {
+		// --silent: auto-start must not pop the window; the tray/hotkey
+		// summon it when needed.
+		if err := k.SetStringValue("slite", `"`+exe+`" --silent`); err != nil {
 			return fmt.Errorf("write run key: %w", err)
 		}
 		return nil

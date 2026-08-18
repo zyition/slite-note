@@ -78,6 +78,15 @@ func webviewDataPath() string {
 }
 
 func main() {
+	// --silent (auto-start): the window stays hidden after startup; the user
+	// summons it via the global hotkey or the tray.
+	for _, a := range os.Args {
+		if a == "--silent" {
+			silentStart = true
+			break
+		}
+	}
+
 	store = NewStore()
 
 	app = application.New(application.Options{
@@ -139,16 +148,17 @@ func main() {
 	}
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
-		positionWindowAtStartup()
-		// Apply the persisted window opacity once the window exists.
-		applyWindowOpacity()
 		setupTray()
-		mainWindow.Show()
-		mainWindow.Focus()
-		// WebView2's own window setup can move the window (e.g. center it)
-		// shortly after creation, overriding the startup bounds. Re-apply the
-		// left-edge placement once everything has settled.
-		time.AfterFunc(1500*time.Millisecond, ensureStartupPosition)
+		// Wait for the WebView2 to finish loading, then position and show the
+		// window in one step: the first visible frame is already at the left
+		// edge, so no post-hoc repositioning (no visible jump). On a silent
+		// launch (--silent, e.g. auto-start) the window stays hidden and is
+		// summoned via hotkey/tray.
+		mainWindow.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+			showMainWindowAtStartup()
+		})
+		// Safety net for the rare case the navigation event never fires.
+		time.AfterFunc(4*time.Second, showMainWindowAtStartup)
 	})
 
 	// Defensive: Wails' own setBounds path re-applies LWA_ALPHA=255 for
@@ -283,14 +293,23 @@ func setWindowBounds(x, y, w, h int) {
 // hotkey) do not yank the window back to the left edge.
 var positionedOnce = false
 
-// ensureStartupPosition re-applies the startup bounds exactly once, shortly
-// after the window settles (WebView2 init may have re-centered it).
-func ensureStartupPosition() {
+// silentStart is true when launched with --silent (auto-start): the window
+// is positioned but never shown; the user summons it via hotkey or tray.
+var silentStart = false
+
+// showMainWindowAtStartup positions the window once the WebView2 has settled
+// and shows it (unless this is a silent launch). Runs at most once.
+func showMainWindowAtStartup() {
 	if positionedOnce {
 		return
 	}
 	positionedOnce = true
 	positionWindowAtStartup()
+	applyWindowOpacity()
+	if !silentStart {
+		mainWindow.Show()
+		mainWindow.Focus()
+	}
 }
 
 // --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
