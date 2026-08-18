@@ -9,6 +9,8 @@
 import { Events, Window as WailsWindow } from "@wailsio/runtime";
 import { Store } from "../../bindings/slite";
 import type { Note, Settings } from "../../bindings/slite";
+import { makeSettings } from "../types/note";
+import { t } from "./i18n";
 
 const LS_NOTES = "slite:notes";
 const LS_SETTINGS = "slite:settings";
@@ -57,11 +59,9 @@ export async function loadSettings(): Promise<Settings> {
   }
   try {
     const raw = localStorage.getItem(LS_SETTINGS);
-    return raw
-      ? (JSON.parse(raw) as Settings)
-      : { theme: "yellow", alwaysOnTop: false };
+    return raw ? (JSON.parse(raw) as Settings) : makeSettings();
   } catch {
-    return { theme: "yellow", alwaysOnTop: false };
+    return makeSettings();
   }
 }
 
@@ -71,6 +71,62 @@ export async function saveSettings(settings: Settings): Promise<void> {
     return;
   }
   localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
+}
+
+/** Re-register the global toggle hotkey (no-op in browser fallback). */
+export async function setHotkey(combo: string): Promise<void> {
+  if (await isNative()) {
+    await Store.SetHotkey(combo);
+  }
+}
+
+/** Open the active data directory in Explorer (native only). */
+export async function openDataDir(): Promise<void> {
+  if (await isNative()) {
+    await Store.OpenDataDir();
+    return;
+  }
+  throw new Error(t.nativeOnly);
+}
+
+/** Active data directory path (native); a friendly label in fallback mode. */
+export async function currentDataDir(): Promise<string> {
+  if (await isNative()) {
+    return await Store.CurrentDataDir();
+  }
+  return "localStorage (browser)";
+}
+
+/**
+ * Pre-migration check for a candidate data directory. Resolves to "" when
+ * the target passes, otherwise a human-readable error message.
+ */
+export async function validateDataDir(path: string): Promise<string> {
+  if (await isNative()) {
+    try {
+      await Store.ValidateDataDir(path);
+      return "";
+    } catch (e) {
+      return String((e as Error)?.message ?? e);
+    }
+  }
+  return t.nativeOnly;
+}
+
+/**
+ * Migrate the data directory. Resolves to "" on success, else an error
+ * message (pre-check failures are included).
+ */
+export async function setDataDir(path: string): Promise<string> {
+  if (await isNative()) {
+    try {
+      await Store.SetDataDir(path);
+      return "";
+    } catch (e) {
+      return String((e as Error)?.message ?? e);
+    }
+  }
+  return t.nativeOnly;
 }
 
 /* ------------------------------------------------------------------ */
@@ -109,4 +165,8 @@ export function onHide(callback: () => void): void {
 
 export function onQuit(callback: () => void): void {
   if (native) Events.On("app:quit", callback);
+}
+
+export function onOpenSettings(callback: () => void): void {
+  if (native) Events.On("app:open-settings", callback);
 }

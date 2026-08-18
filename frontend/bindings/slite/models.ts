@@ -25,4 +25,19 @@ export interface Settings {
      */
     "theme": string;
     "alwaysOnTop": boolean;
+
+    /**
+     * global toggle accelerator, e.g. "Alt+Shift+S"
+     */
+    "hotkey": string;
+
+    /**
+     * Windows Run key (HKCU)
+     */
+    "launchAtStartup": boolean;
+
+    /**
+     * "" = default os.UserConfigDir()/slite
+     */
+    "dataDir": string;
 }

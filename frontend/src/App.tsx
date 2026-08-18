@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "@blocknote/core";
 import { TitleBar } from "./components/TitleBar";
 import { Editor } from "./components/Editor";
+import { SettingsPanel } from "./components/SettingsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
-import { makeNote, THEME_NAMES } from "./types/note";
+import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
 import { deriveTitle } from "./services/title";
 import { THEMES, cycleTheme as nextThemeName } from "./services/theme";
 import { t } from "./services/i18n";
@@ -16,6 +17,7 @@ import {
   hideWindow,
   onHide,
   onQuit,
+  onOpenSettings,
 } from "./services/bridge";
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -24,7 +26,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>({ theme: "yellow", alwaysOnTop: false });
+  const [settings, setSettings] = useState<Settings>(() => makeSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
@@ -47,7 +50,7 @@ export default function App() {
         await saveNotes(list);
       }
       setNotes(list);
-      setSettings(loadedSettings);
+      setSettings({ ...makeSettings(), ...loadedSettings });
       setActiveId(list[list.length - 1]?.id ?? null);
       setReady(true);
     })();
@@ -118,6 +121,34 @@ export default function App() {
     scheduleSave();
   }, [scheduleSave]);
 
+  const deleteNote = useCallback(
+    (id: string) => {
+      const prev = notesRef.current;
+      const next = prev.filter((n) => n.id !== id);
+      if (next.length === 0) {
+        // Keep at least one note so the editor always has a home.
+        next.push(makeNote());
+      }
+      notesRef.current = next;
+      setNotes(next);
+      if (activeId === id) {
+        setActiveId(next[next.length - 1]?.id ?? null);
+      }
+      scheduleSave();
+    },
+    [activeId, scheduleSave],
+  );
+
+  const persistSettings = useCallback((next: Settings) => {
+    setSettings(next);
+    saveSettings(next).catch((e) => console.error(t.saveFailed, e));
+  }, []);
+
+  // Tray menu → Settings… opens the panel (and the panel itself closes via ✕).
+  useEffect(() => {
+    onOpenSettings(() => setSettingsOpen(true));
+  }, []);
+
   const cycleTheme = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, theme: nextThemeName(prev.theme as ThemeName) };
@@ -172,6 +203,8 @@ export default function App() {
         onNewNote={createNote}
         onCycleTheme={cycleTheme}
         onTogglePin={togglePin}
+        onDeleteNote={deleteNote}
+        onOpenSettings={() => setSettingsOpen(true)}
         onHide={hide}
         onClose={hide}
       />
@@ -185,6 +218,12 @@ export default function App() {
           />
         )}
       </main>
+      <SettingsPanel
+        open={settingsOpen}
+        settings={settings}
+        onClose={() => setSettingsOpen(false)}
+        onChanged={persistSettings}
+      />
     </div>
   );
 }

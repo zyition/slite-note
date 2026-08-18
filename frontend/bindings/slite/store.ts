@@ -3,9 +3,10 @@
 
 /**
  * Store is the persistence service bound to the frontend. It owns the data
- * directory (os.UserConfigDir()/slite) and reads/writes notes.json and
- * settings.json. The frontend calls these methods via generated bindings; in
- * pure-browser fallback mode the frontend uses localStorage instead.
+ * directory (os.UserConfigDir()/slite by default, configurable) and
+ * reads/writes notes.json and settings.json. The frontend calls these methods
+ * via generated bindings; in pure-browser fallback mode the frontend uses
+ * localStorage instead.
  * @module
  */
 
@@ -16,6 +17,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
+
+/**
+ * CurrentDataDir returns the active data directory path (display in settings).
+ */
+export function CurrentDataDir(): $CancellablePromise<string> {
+    return $Call.ByID(55725111);
+}
 
 /**
  * LoadNotes reads all notes from disk. Returns an empty slice if the file does
@@ -33,6 +41,14 @@ export function LoadSettings(): $CancellablePromise<$models.Settings> {
 }
 
 /**
+ * OpenDataDir reveals the active data directory in Explorer (no-op in browser
+ * fallback mode).
+ */
+export function OpenDataDir(): $CancellablePromise<void> {
+    return $Call.ByID(11373138);
+}
+
+/**
  * Ping is a trivial binding used to detect whether the frontend is running
  * inside the Wails runtime (native) or in a plain browser (fallback mode).
  * It never fails, unlike LoadNotes/LoadSettings which can error on read.
@@ -42,15 +58,48 @@ export function Ping(): $CancellablePromise<string> {
 }
 
 /**
- * SaveNotes persists the full note list atomically.
+ * SaveNotes persists the full note list atomically. Note deletion is handled
+ * on the frontend (remove from list, then save the full list).
  */
 export function SaveNotes(notes: $models.Note[] | null): $CancellablePromise<void> {
     return $Call.ByID(1083769751, notes);
 }
 
 /**
- * SaveSettings persists settings and applies AlwaysOnTop to the window.
+ * SaveSettings persists settings and applies window-level side effects
+ * (always-on-top, auto-start). DataDir is managed exclusively by SetDataDir.
  */
 export function SaveSettings(settings: $models.Settings): $CancellablePromise<void> {
     return $Call.ByID(698043607, settings);
+}
+
+/**
+ * SetDataDir validates the target, migrates notes.json (if any), switches the
+ * active directory, persists settings, then removes the old slite files.
+ */
+export function SetDataDir(path: string): $CancellablePromise<void> {
+    return $Call.ByID(2189879372, path);
+}
+
+/**
+ * SetHotkey re-registers the global toggle hotkey (no-op in browser fallback,
+ * where hotkeyReconfigure is nil) without persisting; the frontend then calls
+ * SaveSettings with the new combo. On any failure the previous binding is left
+ * untouched.
+ */
+export function SetHotkey(combo: string): $CancellablePromise<void> {
+    return $Call.ByID(2514178955, combo);
+}
+
+/**
+ * ValidateDataDir runs the pre-migration checks for a candidate data directory.
+ * It returns a non-nil error describing the first failed check. Checks:
+ *   - resolves to an absolute path
+ *   - is not the currently active data directory
+ *   - exists and is a directory
+ *   - is writable (probe file create+delete)
+ *   - contains only slite-owned files (notes.json, settings.json, log.txt) or nothing
+ */
+export function ValidateDataDir(path: string): $CancellablePromise<void> {
+    return $Call.ByID(3489296200, path);
 }

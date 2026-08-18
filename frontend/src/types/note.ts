@@ -34,3 +34,14 @@ export function makeNote(): Note {
     updatedAt: now,
   };
 }
+
+export function makeSettings(partial?: Partial<Settings>): Settings {
+  return {
+    theme: "yellow",
+    alwaysOnTop: false,
+    hotkey: "Alt+Shift+S",
+    launchAtStartup: false,
+    dataDir: "",
+    ...partial,
+  };
+}

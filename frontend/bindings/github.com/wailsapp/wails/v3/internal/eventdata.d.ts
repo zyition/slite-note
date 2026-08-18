@@ -9,6 +9,7 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "app:hide": string;
+            "app:open-settings": string;
             "app:quit": string;
         }
     }

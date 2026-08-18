@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -21,16 +22,22 @@ var assets embed.FS
 //go:embed icons/tray.png
 var trayIcon []byte
 
-// App-wide events forwarded to the frontend so it can flush pending saves.
+// App-wide events forwarded to the frontend so it can flush pending saves and
+// open the settings panel from the tray.
 func init() {
 	application.RegisterEvent[string]("app:hide")
 	application.RegisterEvent[string]("app:quit")
+	application.RegisterEvent[string]("app:open-settings")
 }
 
 const (
-	hotkeyToggle = "Alt+Shift+S"
-	defaultWidth = 360
+	defaultHotkey = "Alt+Shift+S"
+	defaultWidth  = 360
 )
+
+// activeHotkey is the currently registered toggle accelerator; empty until the
+// first successful registration.
+var activeHotkey = ""
 
 // debugLog writes diagnostics to %APPDATA%/slite/log.txt (kept small: useful
 // while the app is headless).
@@ -90,16 +97,14 @@ func main() {
 		hideWindow()
 	})
 
-	// Global hotkey toggles window visibility system-wide (core feature).
-	if err := app.GlobalShortcut.Register(hotkeyToggle, func() {
-		debugLog("hotkey fired, visible=%v", mainWindow.IsVisible())
-		toggleWindow()
-	}); err != nil {
-		app.Logger.Error("could not register global shortcut", "error", err)
-		debugLog("hotkey register failed: %v", err)
-	} else {
-		debugLog("hotkey registered: %s", hotkeyToggle)
+	// Global hotkey toggles window visibility system-wide (core feature). The
+	// combo is configurable via Settings; on failure we fall back to the default.
+	toggleHotkey := store.currentSettings().Hotkey
+	if toggleHotkey == "" {
+		toggleHotkey = defaultHotkey
 	}
+	registerToggleHotkey(toggleHotkey)
+	store.hotkeyReconfigure = reconfigureHotkey
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		positionWindowAtStartup()
@@ -111,6 +116,53 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// toggleHotkeyCallback toggles window visibility and logs the event.
+func toggleHotkeyCallback() {
+	debugLog("hotkey fired, visible=%v", mainWindow.IsVisible())
+	toggleWindow()
+}
+
+// registerToggleHotkey binds the given accelerator to the toggle callback.
+// A registration failure is logged but does not abort startup.
+func registerToggleHotkey(combo string) {
+	if err := app.GlobalShortcut.Register(combo, toggleHotkeyCallback); err != nil {
+		app.Logger.Error("could not register global shortcut", "error", err)
+		debugLog("hotkey register failed: %v", err)
+		return
+	}
+	activeHotkey = combo
+	debugLog("hotkey registered: %s", combo)
+}
+
+// reconfigureHotkey swaps the toggle hotkey, leaving the previous binding
+// untouched on any failure:
+//  1. register the new combo (fails fast if invalid / already owned)
+//  2. only then unregister the old combo
+func reconfigureHotkey(newCombo string) error {
+	newCombo = strings.TrimSpace(newCombo)
+	if newCombo == "" {
+		return fmt.Errorf("hotkey must not be empty")
+	}
+	if newCombo == activeHotkey {
+		return nil
+	}
+	if err := app.GlobalShortcut.Register(newCombo, toggleHotkeyCallback); err != nil {
+		return fmt.Errorf("cannot register %q: %w", newCombo, err)
+	}
+	old := activeHotkey
+	activeHotkey = newCombo
+	if old != "" {
+		if err := app.GlobalShortcut.Unregister(old); err != nil {
+			// Roll back to keep exactly one registered combo.
+			_ = app.GlobalShortcut.Unregister(newCombo)
+			activeHotkey = ""
+			return fmt.Errorf("cannot unregister old hotkey %q: %w", old, err)
+		}
+	}
+	debugLog("hotkey changed: %s -> %s", old, newCombo)
+	return nil
 }
 
 // positionWindowAtStartup places the window at the left edge of the primary
@@ -137,6 +189,13 @@ func setupTray() {
 	menu := app.NewMenu()
 	menu.Add("Show/Hide").OnClick(func(ctx *application.Context) {
 		toggleWindow()
+	})
+	menu.Add("Settings...").OnClick(func(ctx *application.Context) {
+		app.Event.Emit("app:open-settings", "")
+		if !mainWindow.IsVisible() {
+			mainWindow.Show()
+		}
+		mainWindow.Focus()
 	})
 	menu.AddSeparator()
 	menu.Add("Quit").OnClick(func(ctx *application.Context) {

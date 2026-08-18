@@ -1,4 +1,4 @@
-import { Minus, Palette, Pin, PinOff, Plus, X } from "lucide-react";
+import { Minus, Palette, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
 import type { Note } from "../types/note";
 import { t } from "../services/i18n";
 import { NotePicker } from "./NotePicker";
@@ -12,6 +12,8 @@ interface TitleBarProps {
   onNewNote: () => void;
   onCycleTheme: () => void;
   onTogglePin: () => void;
+  onDeleteNote: (id: string) => void;
+  onOpenSettings: () => void;
   onHide: () => void;
   onClose: () => void;
 }
@@ -31,6 +33,8 @@ export function TitleBar(props: TitleBarProps) {
     onNewNote,
     onCycleTheme,
     onTogglePin,
+    onDeleteNote,
+    onOpenSettings,
     onHide,
     onClose,
   } = props;
@@ -40,10 +44,20 @@ export function TitleBar(props: TitleBarProps) {
 
   return (
     <header className="titlebar flex h-10 shrink-0 items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-titlebar)] px-2">
-      <NotePicker notes={notes} activeId={activeId} titleFor={titleFor} onSelect={onSelect} />
+      <NotePicker
+        notes={notes}
+        activeId={activeId}
+        titleFor={titleFor}
+        onSelect={onSelect}
+        onDeleteNote={onDeleteNote}
+      />
 
       {/* Empty drag zone: everything between the picker and the buttons drags the window. */}
       <div className="min-w-2 flex-1 self-stretch" aria-hidden="true" />
+
+      <button className={iconBtn} onClick={onOpenSettings} title={t.settings}>
+        <SettingsIcon size={13} />
+      </button>
 
       <button className={iconBtn} onClick={onTogglePin} title={t.alwaysOnTop} aria-pressed={pinned}>
         {pinned ? (
