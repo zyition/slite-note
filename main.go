@@ -145,12 +145,10 @@ func main() {
 		setupTray()
 		mainWindow.Show()
 		mainWindow.Focus()
-		// Re-apply bounds after Show as a safety net: SetWindowPos on a
-		// hidden window can be dropped, leaving the window centered.
-		if !positionedOnce {
-			positionedOnce = true
-			positionWindowAtStartup()
-		}
+		// WebView2's own window setup can move the window (e.g. center it)
+		// shortly after creation, overriding the startup bounds. Re-apply the
+		// left-edge placement once everything has settled.
+		time.AfterFunc(1500*time.Millisecond, ensureStartupPosition)
 	})
 
 	// Defensive: Wails' own setBounds path re-applies LWA_ALPHA=255 for
@@ -284,6 +282,16 @@ func setWindowBounds(x, y, w, h int) {
 // positionedOnce guards the startup placement so later Show() calls (tray /
 // hotkey) do not yank the window back to the left edge.
 var positionedOnce = false
+
+// ensureStartupPosition re-applies the startup bounds exactly once, shortly
+// after the window settles (WebView2 init may have re-centered it).
+func ensureStartupPosition() {
+	if positionedOnce {
+		return
+	}
+	positionedOnce = true
+	positionWindowAtStartup()
+}
 
 // --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
 //
