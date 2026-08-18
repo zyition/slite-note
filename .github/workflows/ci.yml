@@ -39,6 +39,10 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec tsc --noEmit
 
+      - name: Build frontend (for go:embed)
+        working-directory: frontend
+        run: pnpm exec vite build
+
       - name: Go vet
         run: go vet .
 
