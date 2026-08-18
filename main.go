@@ -141,17 +141,23 @@ func main() {
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		positionWindowAtStartup()
 		// Apply the persisted window opacity once the window exists.
-		op := store.currentSettings().Opacity
-		if op < opacityFloor || op > 1 {
-			op = 1 // unset or out of range: fully opaque
-		}
-		if err := setWindowOpacity(op); err != nil {
-			debugLog("set opacity failed: %v", err)
-		}
+		applyWindowOpacity()
 		setupTray()
 		mainWindow.Show()
 		mainWindow.Focus()
+		// Re-apply bounds after Show as a safety net: SetWindowPos on a
+		// hidden window can be dropped, leaving the window centered.
+		if !positionedOnce {
+			positionedOnce = true
+			positionWindowAtStartup()
+		}
 	})
+
+	// Defensive: Wails' own setBounds path re-applies LWA_ALPHA=255 for
+	// layered windows (e.g. after a DPI-driven resize), which would undo a
+	// user-set opacity. Re-apply the persisted value whenever the window
+	// is resized or moved by the framework.
+	applyOpacityOnWindowChanges()
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
@@ -243,20 +249,41 @@ func resumeToggleHotkey() error {
 
 // positionWindowAtStartup places the window at the left edge of the primary
 // screen's work area, full height, with a width of one third of the screen.
+//
+// It uses a raw Win32 SetWindowPos instead of WebviewWindow.SetPosition:
+// the Wails call goes through InvokeSync + setBounds and is unreliable for a
+// still-hidden window (the window ends up centered), and its setBounds path
+// also re-applies LWA_ALPHA=255 which would clobber the window opacity.
 func positionWindowAtStartup() {
 	screen := app.Screen.GetPrimary()
 	if screen == nil {
 		mainWindow.Center()
 		return
 	}
-	wa := screen.WorkArea
-	width := wa.Width / 3
+	pwa := screen.PhysicalWorkArea
+	width := pwa.Width / 3
 	if width < minWidth {
 		width = minWidth
 	}
-	mainWindow.SetPosition(wa.X, wa.Y)
-	mainWindow.SetSize(width, wa.Height)
+	setWindowBounds(pwa.X, pwa.Y, width, pwa.Height)
 }
+
+// setWindowBounds moves/resizes the native window via SetWindowPos.
+func setWindowBounds(x, y, w, h int) {
+	if mainWindow == nil {
+		return
+	}
+	hwnd := uintptr(mainWindow.NativeWindow())
+	if hwnd == 0 {
+		return
+	}
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+		uintptr(swpNoZorder|swpNoActivate))
+}
+
+// positionedOnce guards the startup placement so later Show() calls (tray /
+// hotkey) do not yank the window back to the left edge.
+var positionedOnce = false
 
 // --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
 //
@@ -269,6 +296,7 @@ var (
 	procSetLayeredAttrs = user32.NewProc("SetLayeredWindowAttributes")
 	procGetWindowLong   = user32.NewProc("GetWindowLongPtrW")
 	procSetWindowLong   = user32.NewProc("SetWindowLongPtrW")
+	procSetWindowPos    = user32.NewProc("SetWindowPos")
 )
 
 const (
@@ -277,6 +305,8 @@ const (
 	lwaAlpha     = 0x00000002
 	opacityMin   = 0.05
 	opacityFloor = 0.3 // UI slider minimum; anything below means "not set"
+	swpNoZorder  = 0x0004
+	swpNoActivate = 0x0010
 )
 
 // gwlExStylePtr is the runtime-converted nIndex (GWLP_EXSTYLE = -20) for
@@ -312,6 +342,27 @@ func setWindowOpacity(alpha float64) error {
 		return err
 	}
 	return nil
+}
+
+// applyWindowOpacity applies the persisted opacity (defaulting to opaque when
+// unset). Called at startup and from window-change hooks.
+func applyWindowOpacity() {
+	op := store.currentSettings().Opacity
+	if op < opacityFloor || op > 1 {
+		op = 1 // unset or out of range: fully opaque
+	}
+	if err := setWindowOpacity(op); err != nil {
+		debugLog("set opacity failed: %v", err)
+	}
+}
+
+// applyOpacityOnWindowChanges re-applies the window opacity after framework
+// resizes/moves, because Wails' setBounds re-applies LWA_ALPHA=255 for
+// layered windows (which would undo a user-set transparency).
+func applyOpacityOnWindowChanges() {
+	reapply := func(*application.WindowEvent) { applyWindowOpacity() }
+	mainWindow.OnWindowEvent(events.Common.WindowDidResize, reapply)
+	mainWindow.OnWindowEvent(events.Common.WindowDidMove, reapply)
 }
 
 // setupTray creates the system tray icon with a menu (Show/Hide, Quit). Left

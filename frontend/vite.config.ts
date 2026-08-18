@@ -6,7 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
-    host: "127.0.0.1",
+    // 0.0.0.0 so the UI can be verified from WSL via the Windows host IP.
+    host: "0.0.0.0",
     port: Number(process.env.WAILS_VITE_PORT) || 9245,
     strictPort: true,
   },

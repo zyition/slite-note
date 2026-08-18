@@ -39,7 +39,13 @@ export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
   };
 
   return (
-    <div className="h-full" onMouseDown={handleMouseDown}>
+    <div
+      className="h-full"
+      onMouseDown={handleMouseDown}
+      // Block the editor's default context menu for now; we will build a
+      // custom one later when needed.
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <BlockNoteView
         editor={editor}
         theme={blocknoteTheme}

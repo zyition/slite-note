@@ -41,7 +41,7 @@ export function onSystemThemeChange(cb: () => void): () => void {
   return () => mq.removeEventListener("change", h);
 }
 
-/** Cycle through yellow → gray → dark → system → yellow. */
+/** Cycle through system → yellow → system. */
 export function cycleTheme(current: ThemeName): ThemeName {
   const i = THEME_NAMES.indexOf(current);
   return THEME_NAMES[(i + 1) % THEME_NAMES.length];

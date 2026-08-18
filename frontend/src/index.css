@@ -135,6 +135,7 @@ body {
 
 .bn-editor {
   padding-inline: 14px;
+  padding-left: 36px; /* left gutter for the block handle, symmetric with the right side */
   padding-block: 6px;
   caret-color: var(--fg);
 }
@@ -154,17 +155,36 @@ body {
   margin-block: 1px;
 }
 
-/* Headings: noticeably smaller than BlockNote's defaults. */
-.bn-editor .bn-block-content h1 {
-  font-size: 1.3em;
-  line-height: 1.3;
+/* Headings: noticeably smaller than BlockNote's defaults (BlockNote uses
+   --level: 3em for h1, plus a large padding-top). Override the variables
+   with a higher-specificity selector. */
+.bn-editor [data-content-type="heading"] {
+  --level: 1.3em;
+  padding-top: 4px;
 }
-.bn-editor .bn-block-content h2 {
-  font-size: 1.15em;
-  line-height: 1.3;
+.bn-editor [data-content-type="heading"][data-level="2"] {
+  --level: 1.15em;
 }
-.bn-editor .bn-block-content h3 {
-  font-size: 1.05em;
+.bn-editor [data-content-type="heading"][data-level="3"] {
+  --level: 1.05em;
+}
+.bn-editor [data-content-type="heading"][data-level="4"] {
+  --level: 1em;
+}
+.bn-editor [data-content-type="heading"][data-level="5"] {
+  --level: 0.95em;
+}
+.bn-editor [data-content-type="heading"][data-level="6"] {
+  --level: 0.9em;
+}
+
+/* Line spacing for heading text itself. */
+.bn-editor .bn-block-content h1,
+.bn-editor .bn-block-content h2,
+.bn-editor .bn-block-content h3,
+.bn-editor .bn-block-content h4,
+.bn-editor .bn-block-content h5,
+.bn-editor .bn-block-content h6 {
   line-height: 1.3;
 }
 
@@ -199,13 +219,14 @@ body {
 /* ------------------------------------------------------------------ */
 
 .bn-editor .bn-side-menu {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   color: var(--fg-muted);
+  margin-left: -4px; /* nest the handle into the left gutter */
 }
 .bn-editor .bn-side-menu:hover,
 .bn-editor .bn-side-menu[data-visible="true"] {
@@ -232,11 +253,56 @@ body {
 /* ------------------------------------------------------------------ */
 /* Slash menu + popovers (rendered via portal outside .bn-editor, so   */
 /* selectors are global; CSS vars inherit from :root[data-theme]).     */
+/*                                                                     */
+/* BlockNote's slash menu is a Mantine emotion-styled Stack with the   */
+/* class bn-suggestion-menu; the runtime-injected emotion styles have  */
+/* to be beaten with !important. bn-menu-dropdown covers the drag-     */
+/* handle / table handle menus.                                        */
 /* ------------------------------------------------------------------ */
 
+.bn-suggestion-menu {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14) !important;
+  padding: 4px !important;
+  max-height: 55vh;
+  overflow-y: auto;
+  font-size: 12.5px;
+}
+.bn-suggestion-menu .bn-suggestion-menu-item {
+  font-size: 12.5px !important;
+  color: var(--fg) !important;
+  border-radius: 6px !important;
+  padding: 5px 8px !important;
+  gap: 8px;
+}
+.bn-suggestion-menu .bn-suggestion-menu-item:hover,
+.bn-suggestion-menu .bn-suggestion-menu-item[aria-selected="true"],
+.bn-suggestion-menu .bn-suggestion-menu-item[data-selected="true"],
+.bn-suggestion-menu .bn-suggestion-menu-item--selected {
+  background: var(--hover) !important;
+  color: var(--fg) !important;
+}
+.bn-suggestion-menu .bn-suggestion-menu-label {
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted) !important;
+  padding: 6px 8px 2px !important;
+}
+.bn-suggestion-menu .bn-suggestion-menu-item-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--fg);
+  flex-shrink: 0;
+}
+
 .bn-menu-dropdown {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 10px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
   padding: 4px;
@@ -246,7 +312,7 @@ body {
 }
 .bn-menu-dropdown .bn-menu-item {
   font-size: 12.5px;
-  color: var(--fg);
+  color: var(--fg) !important;
   border-radius: 6px;
   padding: 5px 8px;
   gap: 8px;
@@ -254,8 +320,8 @@ body {
 .bn-menu-dropdown .bn-menu-item:hover,
 .bn-menu-dropdown .bn-menu-item[aria-selected="true"],
 .bn-menu-dropdown .bn-menu-item[data-selected="true"] {
-  background: var(--hover);
-  color: var(--fg);
+  background: var(--hover) !important;
+  color: var(--fg) !important;
 }
 .bn-menu-dropdown .bn-menu-item-icon {
   width: 26px;
@@ -270,7 +336,7 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--fg-muted);
+  color: var(--fg-muted) !important;
   padding: 6px 8px 2px;
 }
 

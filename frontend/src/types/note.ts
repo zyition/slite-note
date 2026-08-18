@@ -9,7 +9,9 @@ export type { Note, Settings };
 
 export type ThemeName = "system" | "yellow" | "gray" | "dark";
 
-export const THEME_NAMES: ThemeName[] = ["yellow", "gray", "dark", "system"];
+// The only user-facing choices: follow the OS, or force the yellow sticky.
+// ("gray"/"dark" remain valid legacy values for persisted settings.)
+export const THEME_NAMES: ThemeName[] = ["system", "yellow"];
 
 /** UUID with a fallback for insecure origins (crypto.randomUUID needs a
  * secure context; the browser-fallback mode may run on plain http). */
