@@ -35,8 +35,10 @@ type Settings struct {
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
 }
 
-// appVersion is the user-facing version shown in the About section; it must
-// stay in sync with the version in build/config.yml and package.json.
+// appVersion is the user-facing version shown in the About section. The
+// release CI (release.yml) overwrites this constant from the git tag before
+// building, so it only serves as the fallback for local / non-release
+// builds; keep it at the last released version.
 const appVersion = "0.1.0"
 
 const notesFileVersion = 1

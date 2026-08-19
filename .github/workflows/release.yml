@@ -42,6 +42,23 @@ jobs:
         run: |
           echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      - name: Set version from tag
+        shell: pwsh
+        # Single source of truth: the release tag (vX.Y.Z). Rewrites the
+        # About-section version (store.go) and the exe metadata
+        # (build/windows/info.json) before building, so a release never
+        # ships a stale version.
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          $store = Get-Content store.go -Raw
+          $store = $store -replace 'const appVersion = "[^"]*"', "const appVersion = `"$ver`""
+          Set-Content store.go -NoNewline $store
+          $info = Get-Content build/windows/info.json -Raw
+          $info = $info -replace '"file_version": "[^"]*"', ('"file_version": "' + $ver + '"')
+          $info = $info -replace '"ProductVersion": "[^"]*"', ('"ProductVersion": "' + $ver + '"')
+          Set-Content build/windows/info.json -NoNewline $info
+          Write-Host "Version set to $ver"
+
       - name: Build
         env:
           PACKAGE_MANAGER: pnpm
