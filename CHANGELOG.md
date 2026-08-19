@@ -6,6 +6,18 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Custom data directory no longer resets to the default after a restart: the
+  migration (`SetDataDir`) used to delete the default dir's `settings.json`,
+  which is the only record of the custom `DataDir`, so any restart (including
+  an overwrite install) fell back to `%APPDATA%\slite`. The default dir's
+  settings.json is now kept in sync as a DataDir anchor.
+- Auto-start state is now read back correctly: `getLaunchAtStartup` queried
+  the registry value name `slite` while `setLaunchAtStartup` writes
+  `slite-note`, so the toggle always showed off after restart. Both names are
+  honored (legacy `slite` entries are cleaned up on disable).
+
 ### Changed
 
 - Open-source readiness cleanup: removed the internal spec (`req.md`), dropped

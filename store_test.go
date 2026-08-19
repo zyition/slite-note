@@ -71,6 +71,121 @@ func TestLoadNotesCorruptRecovery(t *testing.T) {
 	}
 }
 
+// TestSetDataDirSurvivesRestart guards the DataDir anchor regression:
+// SetDataDir used to delete the default dir's settings.json — the only file
+// NewStore reads at startup to rediscover a custom data dir — so any restart
+// fell back to the default directory.
+func TestSetDataDirSurvivesRestart(t *testing.T) {
+	base := t.TempDir()
+	defaultDir := filepath.Join(base, "default") // stands in for %APPDATA%\slite
+	customDir := filepath.Join(base, "custom")
+	for _, d := range []string{defaultDir, customDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notes := []byte(`{"version":1,"notes":[{"id":"a","title":"hi","blocks":[],"createdAt":1,"updatedAt":1}]}`)
+	if err := os.WriteFile(filepath.Join(defaultDir, "notes.json"), notes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Store{dataDir: defaultDir, defaultDir: defaultDir, settings: Settings{Theme: "system", Hotkey: defaultHotkey}}
+	if err := s.SetDataDir(customDir); err != nil {
+		t.Fatalf("SetDataDir: %v", err)
+	}
+	if s.dataDir != customDir {
+		t.Fatalf("active dir after migration = %q, want %q", s.dataDir, customDir)
+	}
+
+	// Restart: NewStore reads only the default dir's settings.json to learn
+	// the custom DataDir. It must still point at customDir.
+	st := (&Store{dataDir: defaultDir, defaultDir: defaultDir}).readSettingsFile(filepath.Join(defaultDir, "settings.json"))
+	if st.DataDir == "" {
+		t.Fatal("anchor lost: default dir settings.json has no DataDir after migration")
+	}
+	if !strings.EqualFold(filepath.Clean(st.DataDir), filepath.Clean(customDir)) {
+		t.Fatalf("anchor DataDir = %q, want %q", st.DataDir, customDir)
+	}
+
+	// Move semantics: notes left the default dir, the anchor settings.json
+	// stays; the custom dir holds the migrated notes plus its own settings.
+	if _, err := os.Stat(filepath.Join(defaultDir, "notes.json")); !os.IsNotExist(err) {
+		t.Errorf("default dir notes.json should have been moved away, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(defaultDir, "settings.json")); err != nil {
+		t.Errorf("anchor settings.json should be kept in the default dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(customDir, "notes.json")); err != nil {
+		t.Errorf("notes.json not migrated to custom dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(customDir, "settings.json")); err != nil {
+		t.Errorf("settings.json not written to custom dir: %v", err)
+	}
+}
+
+// TestSetDataDirAnchorFollowsRepeatedMigration: default → A → B must leave
+// the default dir anchor pointing at B, so a restart lands on the latest
+// custom dir (not the first one).
+func TestSetDataDirAnchorFollowsRepeatedMigration(t *testing.T) {
+	base := t.TempDir()
+	defaultDir := filepath.Join(base, "default")
+	dirA := filepath.Join(base, "a")
+	dirB := filepath.Join(base, "b")
+	for _, d := range []string{defaultDir, dirA, dirB} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s := &Store{dataDir: defaultDir, defaultDir: defaultDir, settings: Settings{Theme: "system", Hotkey: defaultHotkey}}
+	if err := s.SetDataDir(dirA); err != nil {
+		t.Fatalf("migrate to A: %v", err)
+	}
+	if err := s.SetDataDir(dirB); err != nil {
+		t.Fatalf("migrate to B: %v", err)
+	}
+
+	st := (&Store{dataDir: defaultDir, defaultDir: defaultDir}).readSettingsFile(filepath.Join(defaultDir, "settings.json"))
+	if !strings.EqualFold(filepath.Clean(st.DataDir), filepath.Clean(dirB)) {
+		t.Fatalf("anchor DataDir = %q, want %q (must follow repeated migrations)", st.DataDir, dirB)
+	}
+	// The intermediate dir is fully moved away (notes + settings).
+	for _, f := range []string{"notes.json", "settings.json"} {
+		if _, err := os.Stat(filepath.Join(dirA, f)); !os.IsNotExist(err) {
+			t.Errorf("intermediate dir %s should have been moved away, err=%v", f, err)
+		}
+	}
+}
+
+// TestSetDataDirIntoDefaultClearsAnchor: migrating back into the default dir
+// is allowed; the anchor then points at the default dir itself (no-op for
+// NewStore's discovery, and harmless).
+func TestSetDataDirIntoDefaultClearsAnchor(t *testing.T) {
+	base := t.TempDir()
+	defaultDir := filepath.Join(base, "default")
+	customDir := filepath.Join(base, "custom")
+	for _, d := range []string{defaultDir, customDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s := &Store{dataDir: defaultDir, defaultDir: defaultDir, settings: Settings{Theme: "system", Hotkey: defaultHotkey}}
+	if err := s.SetDataDir(customDir); err != nil {
+		t.Fatalf("migrate to custom: %v", err)
+	}
+	if err := s.SetDataDir(defaultDir); err != nil {
+		t.Fatalf("migrate back to default: %v", err)
+	}
+	if s.dataDir != defaultDir {
+		t.Fatalf("active dir = %q, want %q", s.dataDir, defaultDir)
+	}
+	st := (&Store{dataDir: defaultDir, defaultDir: defaultDir}).readSettingsFile(filepath.Join(defaultDir, "settings.json"))
+	if !strings.EqualFold(filepath.Clean(st.DataDir), filepath.Clean(defaultDir)) {
+		t.Fatalf("anchor DataDir = %q, want %q", st.DataDir, defaultDir)
+	}
+}
+
 func TestSaveSettingsOpacityClamp(t *testing.T) {
 	s := newTestStore(t)
 	cases := []struct {

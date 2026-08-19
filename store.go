@@ -57,9 +57,15 @@ const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 // via generated bindings; in pure-browser fallback mode the frontend uses
 // localStorage instead.
 type Store struct {
-	mu       sync.Mutex
-	dataDir  string
-	settings Settings
+	mu      sync.Mutex
+	dataDir string
+	// defaultDir is os.UserConfigDir()/slite — the directory NewStore boots
+	// into unless settings.json there points at a custom DataDir. Its
+	// settings.json doubles as the anchor that lets a restart rediscover a
+	// custom data directory, so SetDataDir must keep it in sync (see
+	// writeAnchorSettings).
+	defaultDir string
+	settings   Settings
 
 	// hotkeyReconfigure is injected by main.go; it re-registers the global
 	// toggle hotkey without disturbing the existing binding on failure.
@@ -78,7 +84,7 @@ func NewStore() *Store {
 		cfg = "."
 	}
 	defaultDir := filepath.Join(cfg, "slite")
-	s := &Store{dataDir: defaultDir}
+	s := &Store{dataDir: defaultDir, defaultDir: defaultDir}
 	s.settings = s.readSettingsFile(filepath.Join(defaultDir, "settings.json"))
 
 	// Honor a persisted custom data directory if it still exists and is a dir.
@@ -328,11 +334,56 @@ func (s *Store) SetDataDir(path string) error {
 		s.mu.Unlock()
 		return fmt.Errorf("write settings in new dir: %w", err)
 	}
+	// Keep the default dir's settings.json in sync as the DataDir anchor so a
+	// restart (NewStore reads only the default dir first) can rediscover this
+	// custom directory. A failure here rolls the migration back — the old dir
+	// must stay untouched rather than half-migrated.
+	if err := s.writeAnchorSettings(); err != nil {
+		s.dataDir = oldDir
+		s.settings.DataDir = oldDir
+		if copiedNotes {
+			os.Remove(filepath.Join(abs, "notes.json"))
+		}
+		s.mu.Unlock()
+		return fmt.Errorf("write anchor settings: %w", err)
+	}
 	s.mu.Unlock()
 
-	// Move semantics: remove the old slite files (best effort).
+	// Move semantics: remove the old slite files (best effort). The default
+	// dir's settings.json is exempt — it is the DataDir anchor above.
 	os.Remove(filepath.Join(oldDir, "notes.json"))
-	os.Remove(filepath.Join(oldDir, "settings.json"))
+	if !strings.EqualFold(filepath.Clean(oldDir), filepath.Clean(s.defaultDir)) {
+		os.Remove(filepath.Join(oldDir, "settings.json"))
+	}
+	return nil
+}
+
+// writeAnchorSettings persists the current settings (whose DataDir points at
+// the active directory) into the default directory's settings.json. NewStore
+// reads that file first at startup to rediscover a custom data directory, so
+// this anchor is what makes a custom DataDir survive restarts and repeated
+// migrations (default → A → B must end with an anchor pointing at B). No-op
+// when the active directory already is the default one — it is written by
+// writeJSONAtomic via settingsPath. Must be called with s.mu held.
+func (s *Store) writeAnchorSettings() error {
+	if strings.EqualFold(filepath.Clean(s.dataDir), filepath.Clean(s.defaultDir)) {
+		return nil
+	}
+	if err := os.MkdirAll(s.defaultDir, 0o755); err != nil {
+		return fmt.Errorf("create default data dir: %w", err)
+	}
+	data, err := json.MarshalIndent(s.settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal anchor settings: %w", err)
+	}
+	path := filepath.Join(s.defaultDir, "settings.json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write anchor temp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename anchor: %w", err)
+	}
 	return nil
 }
 
@@ -447,7 +498,13 @@ func (s *Store) setLaunchAtStartup(enabled bool) error {
 		return fmt.Errorf("open run key: %w", err)
 	}
 	defer k.Close()
+	// Remove the current value name plus the pre-rename legacy "slite" entry
+	// (written by releases before the slite-note rename), so the switch can
+	// never report a stale on-state.
 	if err := k.DeleteValue("slite-note"); err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("delete run key: %w", err)
+	}
+	if err := k.DeleteValue("slite"); err != nil && err != registry.ErrNotExist {
 		return fmt.Errorf("delete run key: %w", err)
 	}
 	return nil
@@ -460,6 +517,12 @@ func (s *Store) getLaunchAtStartup() bool {
 		return false
 	}
 	defer k.Close()
+	// "slite-note" is the current value name; "slite" was written by releases
+	// before the rename and is still honored so existing users keep their
+	// auto-start state across the upgrade.
+	if _, _, err = k.GetStringValue("slite-note"); err == nil {
+		return true
+	}
 	_, _, err = k.GetStringValue("slite")
 	return err == nil
 }
