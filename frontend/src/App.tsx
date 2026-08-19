@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "@blocknote/core";
 import { TitleBar } from "./components/TitleBar";
-import { Editor } from "./components/Editor";
+import { Editor, type NoteConverter } from "./components/Editor";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
@@ -20,6 +20,9 @@ import {
   onHide,
   onQuit,
   onOpenSettings,
+  saveMarkdownDialog,
+  openMarkdownDialog,
+  exportAllMarkdown,
 } from "./services/bridge";
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -40,6 +43,9 @@ export default function App() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Markdown converter bound to the active note's editor (same schema for
+  // every note), used for export/import. Null while the editor is mounting.
+  const converterRef = useRef<NoteConverter | null>(null);
 
   // Show a dismissible banner when persistence fails (disk full, permission…)
   // and auto-clear it after a few seconds.
@@ -237,6 +243,56 @@ export default function App() {
     [],
   );
 
+  /* ---------------- markdown export / import ---------------- */
+
+  // Single note → .md via the native save dialog. Uses the persisted blocks
+  // (App state) rather than the editor's live document, so it stays correct
+  // even while a debounced save is pending.
+  const exportNoteMarkdown = useCallback(
+    async (note: Note) => {
+      const converter = converterRef.current;
+      if (!converter) return;
+      const name = (titleFor(note) || t.untitled).trim() || "Untitled";
+      await saveMarkdownDialog(
+        `${name}.md`,
+        converter.blocksToMarkdown(note.blocks as Block[]),
+      ).catch(reportSaveError);
+    },
+    [reportSaveError, titleFor],
+  );
+
+  // .md file → new note (appended after the active note).
+  const importNoteMarkdown = useCallback(async () => {
+    const converter = converterRef.current;
+    if (!converter) return;
+    const md = await openMarkdownDialog().catch(() => "");
+    if (!md) return; // cancelled or empty file
+    const note = makeNote();
+    note.blocks = converter.markdownToBlocks(md) as unknown as Note["blocks"];
+    const next = [...notesRef.current, note];
+    notesRef.current = next;
+    setNotes(next);
+    setActiveId(note.id);
+    scheduleSave();
+  }, [scheduleSave]);
+
+  // All notes → one .md per note into a user-picked folder. Returns the
+  // number of files written so Settings can show feedback.
+  const exportAllNotesMarkdown = useCallback(async (): Promise<number> => {
+    const converter = converterRef.current;
+    if (!converter) return 0;
+    const files = notesRef.current.map((n) => ({
+      name: (titleFor(n) || t.untitled).trim() || "Untitled",
+      content: converter.blocksToMarkdown(n.blocks as Block[]),
+    }));
+    try {
+      return await exportAllMarkdown(files);
+    } catch (e) {
+      reportSaveError(e);
+      return 0;
+    }
+  }, [reportSaveError, titleFor]);
+
   /* ---------------- quick switching (Ctrl+Tab / Ctrl+Shift+Tab) ------------- */
 
   useEffect(() => {
@@ -322,6 +378,8 @@ export default function App() {
         onTogglePin={togglePin}
         onDeleteNote={deleteNote}
         onRenameNote={renameNote}
+        onExportNote={exportNoteMarkdown}
+        onImportNote={() => void importNoteMarkdown()}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onHide={hide}
@@ -334,6 +392,7 @@ export default function App() {
             note={activeNote}
             blocknoteTheme={THEMES[appliedTheme].blocknote}
             onChange={updateActiveBlocks}
+            onConverterReady={(c) => (converterRef.current = c)}
           />
         )}
       </main>
@@ -342,6 +401,7 @@ export default function App() {
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onChanged={persistSettings}
+        onExportAll={exportAllNotesMarkdown}
       />
       <ShortcutsPanel
         open={shortcutsOpen}

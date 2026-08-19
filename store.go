@@ -27,12 +27,20 @@ type Note struct {
 
 // Settings holds app-level preferences persisted across restarts.
 type Settings struct {
-	Theme           string  `json:"theme"`           // "system" | "yellow" | "gray" | "dark"
+	Theme           string  `json:"theme"` // "system" | "yellow" | "gray" | "dark"
 	AlwaysOnTop     bool    `json:"alwaysOnTop"`
 	Hotkey          string  `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
 	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
 	DataDir         string  `json:"dataDir"`         // "" = default os.UserConfigDir()/slite
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
+
+	// Window bounds in physical pixels, persisted (debounced) on move/resize
+	// so the window reopens where the user left it. 0 = never saved yet.
+	// Owned by the Go side (SaveWindowBounds); the frontend must not set them.
+	WindowX      int `json:"windowX,omitempty"`
+	WindowY      int `json:"windowY,omitempty"`
+	WindowWidth  int `json:"windowWidth,omitempty"`
+	WindowHeight int `json:"windowHeight,omitempty"`
 }
 
 // appVersion is the user-facing version shown in the About section. The
@@ -76,6 +84,10 @@ type Store struct {
 	hotkeyResume  func() error
 	// pickDir opens the native folder picker (Windows).
 	pickDir func() (string, error)
+	// pickSavePath opens the native save-file dialog; "" = user cancelled.
+	pickSavePath func(defaultName string) (string, error)
+	// pickOpenPath opens the native file-open dialog; "" = user cancelled.
+	pickOpenPath func() (string, error)
 }
 
 func NewStore() *Store {
@@ -127,7 +139,7 @@ func (s *Store) currentDataDir() string {
 	return s.dataDir
 }
 
-func (s *Store) notesPath() string   { return filepath.Join(s.dataDir, "notes.json") }
+func (s *Store) notesPath() string    { return filepath.Join(s.dataDir, "notes.json") }
 func (s *Store) settingsPath() string { return filepath.Join(s.dataDir, "settings.json") }
 
 // --- bindings ---
@@ -216,7 +228,7 @@ func (s *Store) LoadSettings() (Settings, error) {
 
 // SaveSettings persists settings and applies window-level side effects
 // (always-on-top, window opacity, auto-start). DataDir is managed
-// exclusively by SetDataDir.
+// exclusively by SetDataDir; window bounds exclusively by SaveWindowBounds.
 func (s *Store) SaveSettings(settings Settings) error {
 	if settings.Theme == "" {
 		settings.Theme = "system"
@@ -229,6 +241,13 @@ func (s *Store) SaveSettings(settings Settings) error {
 	}
 	s.mu.Lock()
 	prev := s.settings
+	// Window bounds are owned by the Go side and updated asynchronously on
+	// move/resize; a stale frontend snapshot (loaded at boot) must never
+	// clobber them.
+	settings.WindowX = prev.WindowX
+	settings.WindowY = prev.WindowY
+	settings.WindowWidth = prev.WindowWidth
+	settings.WindowHeight = prev.WindowHeight
 	s.settings = settings
 	s.settings.DataDir = s.dataDir // migration owns this field
 	s.mu.Unlock()
@@ -413,6 +432,119 @@ func (s *Store) ChooseDataDir() (string, error) {
 		return "", fmt.Errorf("folder picker unavailable")
 	}
 	return s.pickDir()
+}
+
+// SaveWindowBounds persists the window's screen position and size (physical
+// pixels). Called debounced from the Go side on window move/resize; the
+// frontend never calls it. Only the four bounds fields are touched, so the
+// always-on-top / opacity / autostart side effects of SaveSettings do not
+// run on every drag.
+func (s *Store) SaveWindowBounds(x, y, w, h int) error {
+	s.mu.Lock()
+	prev := s.settings
+	s.settings.WindowX, s.settings.WindowY = x, y
+	s.settings.WindowWidth, s.settings.WindowHeight = w, h
+	s.mu.Unlock()
+
+	if err := s.writeJSONAtomic(s.settingsPath(), s.settings); err != nil {
+		s.mu.Lock()
+		s.settings = prev
+		s.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+// MarkdownFile is one note's display name + markdown body, used for bulk
+// .md export.
+type MarkdownFile struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+// SaveMarkdownDialog shows the native save dialog and writes content to the
+// chosen file. Returns the saved path ("" when the user cancels).
+func (s *Store) SaveMarkdownDialog(defaultName, content string) (string, error) {
+	if s.pickSavePath == nil {
+		return "", fmt.Errorf("save dialog unavailable")
+	}
+	path, err := s.pickSavePath(defaultName)
+	if err != nil || path == "" {
+		return path, err
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("write file: %w", err)
+	}
+	return path, nil
+}
+
+// OpenMarkdownDialog shows the native open dialog (markdown/text filter) and
+// returns the chosen file's content ("" when the user cancels or the file is
+// empty).
+func (s *Store) OpenMarkdownDialog() (string, error) {
+	if s.pickOpenPath == nil {
+		return "", fmt.Errorf("open dialog unavailable")
+	}
+	path, err := s.pickOpenPath()
+	if err != nil || path == "" {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read file: %w", err)
+	}
+	return string(data), nil
+}
+
+// ExportAllMarkdown writes every note as its own .md file into a folder the
+// user picks. Returns the number of files written (0 when the user cancels).
+// Colliding names get a numeric suffix; invalid filename characters are
+// replaced so the export can never fail on the target filesystem.
+func (s *Store) ExportAllMarkdown(files []MarkdownFile) (int, error) {
+	if s.pickDir == nil {
+		return 0, fmt.Errorf("folder picker unavailable")
+	}
+	dir, err := s.pickDir()
+	if err != nil {
+		return 0, err
+	}
+	if dir == "" {
+		return 0, nil // cancelled
+	}
+	used := map[string]bool{}
+	written := 0
+	for _, f := range files {
+		name := sanitizeFileName(f.Name)
+		final := name + ".md"
+		for n := 2; used[strings.ToLower(final)]; n++ {
+			final = fmt.Sprintf("%s (%d).md", name, n)
+		}
+		used[strings.ToLower(final)] = true
+		if err := os.WriteFile(filepath.Join(dir, final), []byte(f.Content), 0o644); err != nil {
+			return written, fmt.Errorf("write %s: %w", final, err)
+		}
+		written++
+	}
+	return written, nil
+}
+
+// sanitizeFileName strips characters that are invalid in Windows file names
+// and trims trailing dots/spaces (which Windows treats as separators). Empty
+// input falls back to "Untitled".
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.Map(func(r rune) rune {
+		switch r {
+		case '<', '>', ':', '"', '/', '\\', '|', '?', '*':
+			return '_'
+		}
+		return r
+	}, name)
+	name = strings.TrimRight(name, ". ")
+	if name == "" {
+		return "Untitled"
+	}
+	return name
 }
 
 // OpenDataDir reveals the active data directory in Explorer (no-op in browser

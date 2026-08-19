@@ -3,8 +3,6 @@
 Queued feature requests, kept out of the README until they ship. The README
 intentionally shows no roadmap; pick from here when planning the next release.
 
-- Title override per note (data model ready)
-- Window size/position memory
 - macOS / Linux ports
 - `scoop` / `winget` manifests
 

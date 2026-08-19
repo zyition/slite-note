@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useCreateBlockNote, SideMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
-import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
+import { BlockNoteSchema, defaultBlockSpecs, markdownToBlocks } from "@blocknote/core";
 import type { Block, PartialBlock } from "@blocknote/core";
 import { BlockSideMenu } from "./BlockSideMenu";
 import { onShow } from "../services/bridge";
@@ -34,6 +34,19 @@ interface EditorProps {
   blocknoteTheme: "light" | "dark";
   /** Fired on every document change; App debounces + persists. */
   onChange: (blocks: Block[]) => void;
+  /**
+   * Registers a markdown converter bound to this editor's schema. Called
+   * with null when the editor unmounts (notes remount per note).
+   */
+  onConverterReady?: (converter: NoteConverter | null) => void;
+}
+
+/** Blocks ⇄ markdown, bound to an editor's schema (shared across notes). */
+export interface NoteConverter {
+  /** Blocks → markdown (lossy: tables flatten to plain text). */
+  blocksToMarkdown: (blocks: Block[]) => string;
+  /** Markdown → blocks, parsed with the current editor's schema. */
+  markdownToBlocks: (markdown: string) => Block[];
 }
 
 /**
@@ -46,7 +59,7 @@ interface EditorProps {
  * the document — the note cannot change while the window is away, so the
  * stored position stays valid.
  */
-export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
+export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: EditorProps) {
   const editor = useCreateBlockNote({
     schema: sliteSchema,
     initialContent: (note.blocks?.length ? note.blocks : undefined) as
@@ -57,6 +70,21 @@ export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
     // styling).
     trailingBlock: true,
   });
+
+  // Expose the markdown converter to App for export/import. The schema is
+  // shared by every note, so the converter stays valid for any note's blocks
+  // even though the editor instance belongs to the active note.
+  useEffect(() => {
+    if (!onConverterReady) return;
+    onConverterReady({
+      blocksToMarkdown: (blocks) =>
+        editor.blocksToMarkdownLossy(
+          blocks as unknown as Parameters<typeof editor.blocksToMarkdownLossy>[0],
+        ),
+      markdownToBlocks: (md) => markdownToBlocks(md, editor._tiptapEditor.schema),
+    });
+    return () => onConverterReady(null);
+  }, [editor, onConverterReady]);
 
   // Absolute ProseMirror position of the caret when the window lost focus,
   // restored on refocus. null → no memory (fall back to the document end).

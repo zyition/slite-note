@@ -45,6 +45,10 @@ export function makeSettings(partial?: Partial<Settings>): Settings {
     launchAtStartup: false,
     dataDir: "",
     opacity: 1,
+    windowX: 0,
+    windowY: 0,
+    windowWidth: 0,
+    windowHeight: 0,
     ...partial,
   };
 }

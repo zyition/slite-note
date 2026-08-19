@@ -68,5 +68,9 @@ _Avoid_: data dir（作为领域词，裸词）, 数据文件夹
 _Avoid_: 仓库, data dir（作为领域词）
 
 **Settings**:
-应用级偏好持久化（Theme、Always on Top、Opacity、Global Hotkey、Silent Launch、Data Directory），存于 settings.json。
+应用级偏好持久化（Theme、Always on Top、Opacity、Global Hotkey、Silent Launch、Data Directory、Window Bounds），存于 settings.json。
 _Avoid_: config, 设置页（页面为 UI 概念）
+
+**Window Bounds**:
+窗口的位置与尺寸（物理像素），随移动/缩放防抖持久化并跨重启恢复；目标屏幕不可见时回退默认定位。由 Go 侧独占写入。
+_Avoid_: window position, 窗口布局

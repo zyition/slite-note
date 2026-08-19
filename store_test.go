@@ -204,3 +204,151 @@ func TestSaveSettingsOpacityClamp(t *testing.T) {
 		}
 	}
 }
+
+// TestSaveWindowBoundsPersistsAndIsOwnedByGoSide: SaveWindowBounds must
+// persist the four bounds fields, and a later SaveSettings from the frontend
+// (loaded before the bounds changed) must not clobber them.
+func TestSaveWindowBoundsPersistsAndIsOwnedByGoSide(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveWindowBounds(120, 340, 640, 900); err != nil {
+		t.Fatalf("SaveWindowBounds: %v", err)
+	}
+	st, err := s.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.WindowX != 120 || st.WindowY != 340 || st.WindowWidth != 640 || st.WindowHeight != 900 {
+		t.Fatalf("bounds mismatch: %+v", st)
+	}
+
+	// A stale frontend snapshot (bounds = 0) must not erase the Go-side value.
+	if err := s.SaveSettings(Settings{Theme: "dark", Hotkey: defaultHotkey}); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+	st, _ = s.LoadSettings()
+	if st.WindowX != 120 || st.WindowHeight != 900 {
+		t.Fatalf("SaveSettings clobbered window bounds: %+v", st)
+	}
+}
+
+func TestSanitizeFileName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Shopping list", "Shopping list"},
+		{"a:b*c?<d>", "a_b_c__d_"},
+		{"trailing. ", "trailing"},
+		{"  spaced  ", "spaced"},
+		{"", "Untitled"},
+		{"   ", "Untitled"},
+		{"....", "Untitled"},
+		{"中文便签", "中文便签"},
+	}
+	for _, c := range cases {
+		if got := sanitizeFileName(c.in); got != c.want {
+			t.Errorf("sanitizeFileName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestExportAllMarkdownWritesFilesWithDedupedNames: ExportAllMarkdown writes
+// one .md per entry, sanitizes names, and appends a numeric suffix on
+// collisions (case-insensitive, like NTFS).
+func TestExportAllMarkdownWritesFilesWithDedupedNames(t *testing.T) {
+	s := newTestStore(t)
+	dir := t.TempDir()
+	s.pickDir = func() (string, error) { return dir, nil }
+
+	files := []MarkdownFile{
+		{Name: "Todo", Content: "- a\n- b\n"},
+		{Name: "todo", Content: "dup\n"},
+		{Name: "bad:name?", Content: "sanitized\n"},
+	}
+	got, err := s.ExportAllMarkdown(files)
+	if err != nil {
+		t.Fatalf("ExportAllMarkdown: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("exported %d files, want 3", got)
+	}
+	for _, f := range []string{"Todo.md", "Todo (2).md", "bad_name_.md"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("expected %s to exist: %v", f, err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "Todo.md"))
+	if err != nil || string(data) != "- a\n- b\n" {
+		t.Errorf("Todo.md content mismatch: %q, err=%v", data, err)
+	}
+}
+
+// TestExportAllMarkdownCancel: a cancelled folder picker writes nothing.
+func TestExportAllMarkdownCancel(t *testing.T) {
+	s := newTestStore(t)
+	s.pickDir = func() (string, error) { return "", nil }
+	got, err := s.ExportAllMarkdown([]MarkdownFile{{Name: "x", Content: "y"}})
+	if err != nil || got != 0 {
+		t.Fatalf("cancelled export: got=%d err=%v, want 0 nil", got, err)
+	}
+}
+
+func TestSaveMarkdownDialogWritesChosenPath(t *testing.T) {
+	s := newTestStore(t)
+	dir := t.TempDir()
+	wanted := filepath.Join(dir, "out.md")
+	s.pickSavePath = func(name string) (string, error) { return wanted, nil }
+	path, err := s.SaveMarkdownDialog("default.md", "# hi\n")
+	if err != nil || path != wanted {
+		t.Fatalf("SaveMarkdownDialog: path=%q err=%v", path, err)
+	}
+	data, err := os.ReadFile(wanted)
+	if err != nil || string(data) != "# hi\n" {
+		t.Errorf("file content mismatch: %q, err=%v", data, err)
+	}
+}
+
+func TestSaveMarkdownDialogCancel(t *testing.T) {
+	s := newTestStore(t)
+	s.pickSavePath = func(name string) (string, error) { return "", nil }
+	path, err := s.SaveMarkdownDialog("x.md", "body")
+	if err != nil || path != "" {
+		t.Fatalf("cancelled save: path=%q err=%v, want empty nil", path, err)
+	}
+}
+
+func TestOpenMarkdownDialogReadsFile(t *testing.T) {
+	s := newTestStore(t)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "note.md")
+	if err := os.WriteFile(src, []byte("# imported\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.pickOpenPath = func() (string, error) { return src, nil }
+	content, err := s.OpenMarkdownDialog()
+	if err != nil || content != "# imported\n" {
+		t.Fatalf("OpenMarkdownDialog: content=%q err=%v", content, err)
+	}
+}
+
+func TestOpenMarkdownDialogCancel(t *testing.T) {
+	s := newTestStore(t)
+	s.pickOpenPath = func() (string, error) { return "", nil }
+	content, err := s.OpenMarkdownDialog()
+	if err != nil || content != "" {
+		t.Fatalf("cancelled open: content=%q err=%v, want empty nil", content, err)
+	}
+}
+
+// TestSaveWindowBoundsReloadsFromDisk: the persisted bounds survive a
+// restart (NewStore → LoadSettings), i.e. the write path is the real
+// settings.json, not just memory.
+func TestSaveWindowBoundsReloadsFromDisk(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveWindowBounds(10, 20, 800, 600); err != nil {
+		t.Fatal(err)
+	}
+	loaded := (&Store{dataDir: s.dataDir}).readSettingsFile(s.settingsPath())
+	if loaded.WindowX != 10 || loaded.WindowY != 20 || loaded.WindowWidth != 800 || loaded.WindowHeight != 600 {
+		t.Fatalf("bounds not persisted to disk: %+v", loaded)
+	}
+}

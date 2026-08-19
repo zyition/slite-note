@@ -41,6 +41,16 @@ export function CurrentDataDir(): $CancellablePromise<string> {
 }
 
 /**
+ * ExportAllMarkdown writes every note as its own .md file into a folder the
+ * user picks. Returns the number of files written (0 when the user cancels).
+ * Colliding names get a numeric suffix; invalid filename characters are
+ * replaced so the export can never fail on the target filesystem.
+ */
+export function ExportAllMarkdown(files: $models.MarkdownFile[] | null): $CancellablePromise<number> {
+    return $Call.ByID(2575122013, files);
+}
+
+/**
  * LoadNotes reads all notes from disk. Returns an empty slice if the file does
  * not exist yet.
  */
@@ -61,6 +71,15 @@ export function LoadSettings(): $CancellablePromise<$models.Settings> {
  */
 export function OpenDataDir(): $CancellablePromise<void> {
     return $Call.ByID(11373138);
+}
+
+/**
+ * OpenMarkdownDialog shows the native open dialog (markdown/text filter) and
+ * returns the chosen file's content ("" when the user cancels or the file is
+ * empty).
+ */
+export function OpenMarkdownDialog(): $CancellablePromise<string> {
+    return $Call.ByID(3895054086);
 }
 
 /**
@@ -89,6 +108,14 @@ export function ResumeHotkey(): $CancellablePromise<void> {
 }
 
 /**
+ * SaveMarkdownDialog shows the native save dialog and writes content to the
+ * chosen file. Returns the saved path ("" when the user cancels).
+ */
+export function SaveMarkdownDialog(defaultName: string, content: string): $CancellablePromise<string> {
+    return $Call.ByID(1755382979, defaultName, content);
+}
+
+/**
  * SaveNotes persists the full note list atomically. Note deletion is handled
  * on the frontend (remove from list, then save the full list).
  */
@@ -99,10 +126,21 @@ export function SaveNotes(notes: $models.Note[] | null): $CancellablePromise<voi
 /**
  * SaveSettings persists settings and applies window-level side effects
  * (always-on-top, window opacity, auto-start). DataDir is managed
- * exclusively by SetDataDir.
+ * exclusively by SetDataDir; window bounds exclusively by SaveWindowBounds.
  */
 export function SaveSettings(settings: $models.Settings): $CancellablePromise<void> {
     return $Call.ByID(698043607, settings);
+}
+
+/**
+ * SaveWindowBounds persists the window's screen position and size (physical
+ * pixels). Called debounced from the Go side on window move/resize; the
+ * frontend never calls it. Only the four bounds fields are touched, so the
+ * always-on-top / opacity / autostart side effects of SaveSettings do not
+ * run on every drag.
+ */
+export function SaveWindowBounds(x: number, y: number, w: number, h: number): $CancellablePromise<void> {
+    return $Call.ByID(2293857695, x, y, w, h);
 }
 
 /**

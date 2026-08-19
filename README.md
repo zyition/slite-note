@@ -17,9 +17,13 @@ scratchpad that stays out of your way.
   tray menu
 - **Always on top** pin, **opacity** (50–100%), theme following the OS light /
   dark mode (or a manual sticky-note yellow)
+- **Window position memory**: size and placement survive restarts; a window
+  left on a disconnected monitor falls back to the default spot
 - **Silent auto-start**: optional launch at sign-in without popping the window
 - **Block editor**: BlockNote — `/` slash menu, checklists, headings, quotes,
   code blocks, drag-to-reorder, bubble toolbar
+- **Markdown import/export**: export a note as `.md` from the picker, import a
+  `.md` as a new note, or export every note from Settings
 - **Auto-save** (800ms debounce) to a single local file
 - **Multiple notes** via the title-bar picker; delete from the note menu
 - **Relocatable data**: move your notes folder from the settings panel

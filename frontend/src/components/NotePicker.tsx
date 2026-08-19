@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, FileDown, FileUp, Pencil, Trash2, X } from "lucide-react";
 import type { Note } from "../types/note";
 import { t } from "../services/i18n";
 
@@ -11,6 +11,10 @@ interface NotePickerProps {
   onDeleteNote: (id: string) => void;
   /** Manual title override; "" restores the derived first-line title. */
   onRenameNote: (id: string, title: string) => void;
+  /** Export a single note as a .md file. */
+  onExportNote: (note: Note) => void;
+  /** Import a .md file as a new note. */
+  onImportNote: () => void;
 }
 
 /**
@@ -26,6 +30,8 @@ export function NotePicker({
   onSelect,
   onDeleteNote,
   onRenameNote,
+  onExportNote,
+  onImportNote,
 }: NotePickerProps) {
   const [open, setOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -188,6 +194,16 @@ export function NotePicker({
                   <span className="flex shrink-0 items-center">
                     <button
                       className="rounded p-1 text-[var(--fg-muted)] opacity-0 hover:bg-black/10 hover:text-[var(--fg)] group-hover:opacity-100 dark:hover:bg-white/10"
+                      onClick={() => {
+                        setOpen(false);
+                        onExportNote(note);
+                      }}
+                      title={t.exportNote}
+                    >
+                      <FileDown size={11} />
+                    </button>
+                    <button
+                      className="rounded p-1 text-[var(--fg-muted)] opacity-0 hover:bg-black/10 hover:text-[var(--fg)] group-hover:opacity-100 dark:hover:bg-white/10"
                       onClick={() => startRename(note)}
                       title={t.renameNote}
                     >
@@ -205,6 +221,18 @@ export function NotePicker({
               </div>
             );
           })}
+          {/* Import .md as a new note (always visible, at the bottom). */}
+          <button
+            className="mt-0.5 flex w-full items-center gap-1.5 rounded border-t border-[var(--border)] px-1.5 py-1.5 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            onClick={() => {
+              setOpen(false);
+              onImportNote();
+            }}
+            title={t.importMarkdown}
+          >
+            <FileUp size={11} />
+            {t.importMarkdown}
+          </button>
         </div>
       )}
     </div>

@@ -22,7 +22,8 @@ const en = {
   deleteNote: "Delete note",
   deleteConfirm: "Delete?",
   renameNote: "Rename note",
-
+  exportNote: "Export as Markdown",
+  importMarkdown: "Import Markdown…",
   // Settings panel
   settingsTitle: "Settings",
   closePanel: "Close settings",
@@ -43,6 +44,12 @@ const en = {
   cancel: "Cancel",
   opacitySection: "Window opacity",
   opacityDesc: "Make the window see-through. 100% is fully opaque.",
+
+  // Markdown export (settings)
+  exportAllSection: "Markdown export",
+  exportAllDesc: "Write every note as its own .md file into a folder of your choice.",
+  exportAll: "Export all as Markdown…",
+  exportDone: (n: number) => `Exported ${n} note${n === 1 ? "" : "s"} to the selected folder.`,
 
   // Shortcut cheatsheet
   shortcutsTitle: "Keyboard shortcuts",

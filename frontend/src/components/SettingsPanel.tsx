@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Droplets, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, X } from "lucide-react";
+import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { t } from "../services/i18n";
 import { formatCombo, displayCombo } from "../services/hotkey";
@@ -23,6 +23,8 @@ interface SettingsPanelProps {
   onClose: () => void;
   /** Persist a settings change (App updates state + saves). */
   onChanged: (next: Settings) => void;
+  /** Export every note as a .md file; resolves to the number written. */
+  onExportAll: () => Promise<number>;
 }
 
 /**
@@ -34,13 +36,15 @@ interface SettingsPanelProps {
  * old combo cannot toggle the window mid-recording; a combo equal to the
  * current one is simply kept.
  */
-export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPanelProps) {
+export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll }: SettingsPanelProps) {
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
   const [dataDir, setDataDirDisplay] = useState(settings.dataDir || "…");
   const [moving, setMoving] = useState(false);
   const [migrateMsg, setMigrateMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [version, setVersion] = useState("…");
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
 
   // Tracks whether the toggle hotkey is currently suspended (recording active).
   const suspendedRef = useRef(false);
@@ -51,6 +55,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
     if (!open) return;
     setHotkeyError(null);
     setMigrateMsg(null);
+    setExportMsg(null);
     currentDataDir()
       .then(setDataDirDisplay)
       .catch(() => {});
@@ -153,6 +158,19 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
       setMoving(false);
     }
   }, []);
+
+  const handleExportAll = useCallback(async () => {
+    setExportMsg(null);
+    setExporting(true);
+    try {
+      const count = await onExportAll();
+      if (count > 0) setExportMsg(t.exportDone(count));
+    } catch (err) {
+      setExportMsg(String((err as Error)?.message ?? err));
+    } finally {
+      setExporting(false);
+    }
+  }, [onExportAll]);
 
   if (!open) return null;
 
@@ -307,6 +325,19 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
               </p>
             )}
           </section>
+          {/* Markdown export */}
+          <section>
+            <div className={sectionLabel}>
+              <FileDown size={11} /> {t.exportAllSection}
+            </div>
+            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.exportAllDesc}</p>
+            <button className={secondaryBtn} onClick={() => void handleExportAll()} disabled={exporting}>
+              {exporting ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />}
+              {t.exportAll}
+            </button>
+            {exportMsg && <p className="mt-2 text-[10px] text-green-600 dark:text-green-400">{exportMsg}</p>}
+          </section>
+
           {/* About */}
           <section>
             <div className={sectionLabel}>

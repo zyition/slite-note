@@ -20,6 +20,8 @@ interface TitleBarProps {
   onTogglePin: () => void;
   onDeleteNote: (id: string) => void;
   onRenameNote: (id: string, title: string) => void;
+  onExportNote: (note: Note) => void;
+  onImportNote: () => void;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onHide: () => void;
@@ -46,6 +48,8 @@ export function TitleBar(props: TitleBarProps) {
     onTogglePin,
     onDeleteNote,
     onRenameNote,
+    onExportNote,
+    onImportNote,
     onOpenSettings,
     onOpenShortcuts,
     onHide,
@@ -64,6 +68,8 @@ export function TitleBar(props: TitleBarProps) {
         onSelect={onSelect}
         onDeleteNote={onDeleteNote}
         onRenameNote={onRenameNote}
+        onExportNote={onExportNote}
+        onImportNote={onImportNote}
       />
 
       {/* Empty drag zone: everything between the picker and the buttons drags the window. */}

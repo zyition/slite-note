@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -36,6 +37,7 @@ const (
 	defaultHotkey = "Alt+Shift+S"
 	initialWidth  = 480 // startup width; adjusted to 1/3 of the screen in positionWindowAtStartup
 	minWidth      = 320
+	minHeight     = 320
 )
 
 // activeHotkey is the currently registered toggle accelerator; empty while
@@ -116,7 +118,7 @@ func main() {
 			// the running instance can flush pending saves and exit gracefully
 			// (releasing the exe file lock) instead of being force-killed.
 			OnSecondInstanceLaunch: onSecondInstanceLaunch,
-			ExitCode:              0,
+			ExitCode:               0,
 		},
 		Windows: application.WindowsOptions{
 			// Default is %APPDATA%/<exe>.exe which is both ugly and roaming;
@@ -180,6 +182,22 @@ func main() {
 			PromptForSingleSelection()
 		return result, err
 	}
+	store.pickSavePath = func(defaultName string) (string, error) {
+		return app.Dialog.SaveFile().
+			SetFilename(defaultName).
+			AddFilter("Markdown", "*.md").
+			AttachToWindow(mainWindow).
+			PromptForSingleSelection()
+	}
+	store.pickOpenPath = func() (string, error) {
+		return app.Dialog.OpenFile().
+			CanChooseFiles(true).
+			CanChooseDirectories(false).
+			AddFilter("Markdown / Text", "*.md;*.markdown;*.txt").
+			SetTitle("Import markdown").
+			AttachToWindow(mainWindow).
+			PromptForSingleSelection()
+	}
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		setupTray()
@@ -216,6 +234,7 @@ func onSecondInstanceLaunch(data application.SecondInstanceData) {
 			// before overwriting the exe: flush pending auto-saves, then
 			// quit. Force-killing would risk losing the last keystrokes.
 			debugLog("second instance requested quit")
+			flushBoundsSave()
 			app.Event.Emit("app:quit", "")
 			time.Sleep(250 * time.Millisecond)
 			app.Quit()
@@ -316,14 +335,23 @@ func resumeToggleHotkey() error {
 	return nil
 }
 
-// positionWindowAtStartup places the window at the left edge of the primary
-// screen's work area, full height, with a width of one third of the screen.
+// positionWindowAtStartup restores the window to its last saved bounds
+// (Settings.Window*) when those still sit on a visible screen, otherwise
+// falls back to the default: left edge of the primary screen's work area,
+// full height, one third of the screen wide.
 //
 // It uses a raw Win32 SetWindowPos instead of WebviewWindow.SetPosition:
 // the Wails call goes through InvokeSync + setBounds and is unreliable for a
 // still-hidden window (the window ends up centered), and its setBounds path
 // also re-applies LWA_ALPHA=255 which would clobber the window opacity.
 func positionWindowAtStartup() {
+	st := store.currentSettings()
+	if st.WindowWidth > 0 && st.WindowHeight > 0 &&
+		boundsVisible(st.WindowX, st.WindowY, st.WindowWidth, st.WindowHeight) {
+		w := max(st.WindowWidth, minWidth)
+		setWindowBounds(st.WindowX, st.WindowY, w, max(st.WindowHeight, minHeight))
+		return
+	}
 	screen := app.Screen.GetPrimary()
 	if screen == nil {
 		mainWindow.Center()
@@ -335,6 +363,23 @@ func positionWindowAtStartup() {
 		width = minWidth
 	}
 	setWindowBounds(pwa.X, pwa.Y, width, pwa.Height)
+}
+
+// boundsVisible reports whether the given rect (physical pixels) overlaps any
+// screen's physical work area, so a window left on a disconnected monitor
+// falls back to the default placement instead of reopening off-screen.
+func boundsVisible(x, y, w, h int) bool {
+	for _, s := range app.Screen.GetAll() {
+		wa := s.PhysicalWorkArea
+		ox := max(x, wa.X)
+		oy := max(y, wa.Y)
+		ox2 := min(x+w, wa.X+wa.Width)
+		oy2 := min(y+h, wa.Y+wa.Height)
+		if ox2 > ox && oy2 > oy {
+			return true
+		}
+	}
+	return false
 }
 
 // setWindowBounds moves/resizes the native window via SetWindowPos.
@@ -395,15 +440,16 @@ var (
 	procGetWindowLong   = user32.NewProc("GetWindowLongPtrW")
 	procSetWindowLong   = user32.NewProc("SetWindowLongPtrW")
 	procSetWindowPos    = user32.NewProc("SetWindowPos")
+	procGetWindowRect   = user32.NewProc("GetWindowRect")
 )
 
 const (
-	gwlExStyle   = int(-20)
-	wsExLayered  = 0x00080000
-	lwaAlpha     = 0x00000002
-	opacityMin   = 0.05
-	opacityFloor = 0.3 // UI slider minimum; anything below means "not set"
-	swpNoZorder  = 0x0004
+	gwlExStyle    = int(-20)
+	wsExLayered   = 0x00080000
+	lwaAlpha      = 0x00000002
+	opacityMin    = 0.05
+	opacityFloor  = 0.3 // UI slider minimum; anything below means "not set"
+	swpNoZorder   = 0x0004
 	swpNoActivate = 0x0010
 )
 
@@ -474,11 +520,77 @@ func applyWindowOpacity() {
 
 // applyOpacityOnWindowChanges re-applies the window opacity after framework
 // resizes/moves, because Wails' setBounds re-applies LWA_ALPHA=255 for
-// layered windows (which would undo a user-set transparency).
+// layered windows (which would undo a user-set transparency), and debounce-
+// saves the window bounds so the position/size survive a restart.
 func applyOpacityOnWindowChanges() {
-	reapply := func(*application.WindowEvent) { applyWindowOpacity() }
-	mainWindow.OnWindowEvent(events.Common.WindowDidResize, reapply)
-	mainWindow.OnWindowEvent(events.Common.WindowDidMove, reapply)
+	onChange := func(*application.WindowEvent) {
+		applyWindowOpacity()
+		scheduleBoundsSave()
+	}
+	mainWindow.OnWindowEvent(events.Common.WindowDidResize, onChange)
+	mainWindow.OnWindowEvent(events.Common.WindowDidMove, onChange)
+}
+
+// --- window bounds persistence (Win32 GetWindowRect + debounced save) ---
+
+// boundsSaveDelay coalesces the move/resize event storm during a drag into a
+// single settings write.
+const boundsSaveDelay = 400 * time.Millisecond
+
+// boundsSaveTimer is the pending debounce; nil when no save is scheduled.
+var boundsSaveTimer *time.Timer
+
+// scheduleBoundsSave debounces a window-bounds save. The startup placement
+// also fires move/resize events; saving those is harmless (they are the
+// window's current state) but the 400ms delay keeps drags to one write.
+func scheduleBoundsSave() {
+	if boundsSaveTimer != nil {
+		boundsSaveTimer.Stop()
+	}
+	boundsSaveTimer = time.AfterFunc(boundsSaveDelay, saveWindowBoundsNow)
+}
+
+// flushBoundsSave persists any pending bounds immediately (called before the
+// window hides or the app quits so the last drag position is not lost).
+func flushBoundsSave() {
+	if boundsSaveTimer == nil {
+		return
+	}
+	boundsSaveTimer.Stop()
+	boundsSaveTimer = nil
+	saveWindowBoundsNow()
+}
+
+// saveWindowBoundsNow reads the window rect (physical pixels, matching the
+// SetWindowPos-based placement) and persists it. Best effort: a failed write
+// only costs the last drag position.
+func saveWindowBoundsNow() {
+	boundsSaveTimer = nil
+	if mainWindow == nil {
+		return
+	}
+	hwnd := uintptr(mainWindow.NativeWindow())
+	if hwnd == 0 {
+		return
+	}
+	var r winRect
+	if _, _, err := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r))); err != nil && err != windows.ERROR_SUCCESS {
+		debugLog("GetWindowRect failed: %v", err)
+		return
+	}
+	w := int(r.Right - r.Left)
+	h := int(r.Bottom - r.Top)
+	if w <= 0 || h <= 0 {
+		return
+	}
+	if err := store.SaveWindowBounds(int(r.Left), int(r.Top), w, h); err != nil {
+		debugLog("save window bounds failed: %v", err)
+	}
+}
+
+// winRect mirrors the Win32 RECT layout (LONG left/top/right/bottom).
+type winRect struct {
+	Left, Top, Right, Bottom int32
 }
 
 // setupTray creates the system tray icon with a menu (Show/Hide, Quit). Left
@@ -503,6 +615,7 @@ func setupTray() {
 	menu.AddSeparator()
 	menu.Add("Quit").OnClick(func(ctx *application.Context) {
 		// Give the frontend a moment to flush pending auto-saves.
+		flushBoundsSave()
 		app.Event.Emit("app:quit", "")
 		time.Sleep(250 * time.Millisecond)
 		app.Quit()
@@ -527,5 +640,6 @@ func toggleWindow() {
 func hideWindow() {
 	// Let the frontend flush pending auto-saves before the window disappears.
 	app.Event.Emit("app:hide", "")
+	flushBoundsSave()
 	mainWindow.Hide()
 }

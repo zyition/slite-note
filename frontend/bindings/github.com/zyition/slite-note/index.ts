@@ -7,6 +7,7 @@ export {
 };
 
 export type {
+    MarkdownFile,
     Note,
     Settings
 } from "./models.js";

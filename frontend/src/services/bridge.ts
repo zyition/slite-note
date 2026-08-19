@@ -136,6 +136,80 @@ export async function currentDataDir(): Promise<string> {
   return "localStorage (browser)";
 }
 
+/* ------------------------------------------------------------------ */
+/* Markdown import / export                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Save a markdown file via the native save dialog. Resolves to the saved
+ * path, or "" when the user cancels. Browser fallback downloads via an
+ * anchor and resolves to the default name.
+ */
+export async function saveMarkdownDialog(
+  defaultName: string,
+  content: string,
+): Promise<string> {
+  if (await isNative()) {
+    return await Store.SaveMarkdownDialog(defaultName, content);
+  }
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = defaultName;
+  a.click();
+  URL.revokeObjectURL(url);
+  return defaultName;
+}
+
+/**
+ * Pick and read a markdown/text file via the native open dialog. Resolves to
+ * the file content, or "" when the user cancels (or the file is empty).
+ * Browser fallback uses a hidden <input type="file">.
+ */
+export async function openMarkdownDialog(): Promise<string> {
+  if (await isNative()) {
+    return await Store.OpenMarkdownDialog();
+  }
+  return new Promise<string>((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.markdown,.txt";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return resolve("");
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => resolve("");
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+}
+
+/**
+ * Export every note as its own .md file into a user-picked folder. Resolves
+ * to the number of files written (0 when the user cancels). Browser fallback
+ * downloads each note as a separate file.
+ */
+export async function exportAllMarkdown(
+  files: { name: string; content: string }[],
+): Promise<number> {
+  if (await isNative()) {
+    return await Store.ExportAllMarkdown(files);
+  }
+  for (const f of files) {
+    const blob = new Blob([f.content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${f.name}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return files.length;
+}
+
 /**
  * Pre-migration check for a candidate data directory. Resolves to "" when
  * the target passes, otherwise a human-readable error message.
