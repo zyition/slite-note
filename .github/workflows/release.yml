@@ -78,10 +78,41 @@ jobs:
         run: |
           Compress-Archive -Path bin\slite-note.exe -DestinationPath "bin\slite-note-${{ github.ref_name }}-windows-amd64.zip"
 
+      - name: Extract changelog section for release body
+        shell: pwsh
+        # Single source of truth for the release description: the Keep a
+        # Changelog section matching the tag (e.g. "## [0.2.0] - date"),
+        # written verbatim to release-body.md. A release without a matching
+        # section fails the job, so publishing always forces a changelog
+        # entry. Bottom link-definitions ([Unreleased]: …) are excluded.
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $lines = Get-Content CHANGELOG.md
+          $inSection = $false
+          $out = [System.Collections.Generic.List[string]]::new()
+          foreach ($line in $lines) {
+              if ($line -match '^## \[') {
+                  if ($inSection) { break }  # reached the next section
+                  $inSection = $line -match "^## \[$([regex]::Escape($tag))\]( -.*)?$"
+                  if ($inSection) { $out.Add($line) }
+              }
+              elseif ($inSection -and $line -match '^\[[^\]]+\]: ') { break }  # link-definitions block
+              elseif ($inSection) { $out.Add($line) }
+          }
+          if ($out.Count -eq 0) {
+              Write-Error "CHANGELOG.md has no section for version $tag - add a '## [$tag]' section (Keep a Changelog format) before releasing."
+              exit 1
+          }
+          $body = $out -join [Environment]::NewLine
+          $body += [Environment]::NewLine + [Environment]::NewLine + '---' + [Environment]::NewLine + 'Full changelog: https://github.com/zyition/slite-note/blob/main/CHANGELOG.md'
+          Set-Content -Path release-body.md -Value $body -Encoding UTF8
+          Write-Host "Release body extracted from CHANGELOG.md:"
+          Write-Host $body
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release-body.md
           files: |
             bin/*-installer.exe
             bin/slite-note-*-windows-amd64.zip
