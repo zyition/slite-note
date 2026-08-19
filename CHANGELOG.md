@@ -6,6 +6,14 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-19
+
+### Changed
+
+- WebView2 memory footprint: disable unused background features (Office
+  Online web previews, built-in PDF viewer) and cap the V8 JS heap at
+  128MB via the Windows browser options.
+
 ## [0.1.1] - 2026-08-19
 
 ### Fixed
@@ -66,5 +74,7 @@ All notable changes to slite-note are documented here. Format follows
 - Default WebView2 data path (`%APPDATA%\slite.exe` dir) replaced with a
   clean LocalAppData location.
 
-[Unreleased]: https://github.com/zyition/slite-note/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zyition/slite-note/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/zyition/slite-note/releases/tag/v0.1.2
+[0.1.1]: https://github.com/zyition/slite-note/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zyition/slite-note/releases/tag/v0.1.0
