@@ -42,9 +42,11 @@ export function CurrentDataDir(): $CancellablePromise<string> {
 
 /**
  * ExportAllMarkdown writes every note as its own .md file into a folder the
- * user picks. Returns the number of files written (0 when the user cancels).
- * Colliding names get a numeric suffix; invalid filename characters are
- * replaced so the export can never fail on the target filesystem.
+ * user picks (defaulting to Downloads). Single-note export passes a
+ * one-element slice. Returns the number of files written (0 when the user
+ * cancels). Colliding names get a numeric suffix; invalid filename
+ * characters are replaced so the export can never fail on the target
+ * filesystem.
  */
 export function ExportAllMarkdown(files: $models.MarkdownFile[] | null): $CancellablePromise<number> {
     return $Call.ByID(2575122013, files);
@@ -105,14 +107,6 @@ export function Ping(): $CancellablePromise<string> {
  */
 export function ResumeHotkey(): $CancellablePromise<void> {
     return $Call.ByID(2145843646);
-}
-
-/**
- * SaveMarkdownDialog shows the native save dialog and writes content to the
- * chosen file. Returns the saved path ("" when the user cancels).
- */
-export function SaveMarkdownDialog(defaultName: string, content: string): $CancellablePromise<string> {
-    return $Call.ByID(1755382979, defaultName, content);
 }
 
 /**

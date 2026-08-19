@@ -257,7 +257,7 @@ func TestSanitizeFileName(t *testing.T) {
 func TestExportAllMarkdownWritesFilesWithDedupedNames(t *testing.T) {
 	s := newTestStore(t)
 	dir := t.TempDir()
-	s.pickDir = func() (string, error) { return dir, nil }
+	s.pickExportDir = func() (string, error) { return dir, nil }
 
 	files := []MarkdownFile{
 		{Name: "Todo", Content: "- a\n- b\n"},
@@ -285,34 +285,26 @@ func TestExportAllMarkdownWritesFilesWithDedupedNames(t *testing.T) {
 // TestExportAllMarkdownCancel: a cancelled folder picker writes nothing.
 func TestExportAllMarkdownCancel(t *testing.T) {
 	s := newTestStore(t)
-	s.pickDir = func() (string, error) { return "", nil }
+	s.pickExportDir = func() (string, error) { return "", nil }
 	got, err := s.ExportAllMarkdown([]MarkdownFile{{Name: "x", Content: "y"}})
 	if err != nil || got != 0 {
 		t.Fatalf("cancelled export: got=%d err=%v, want 0 nil", got, err)
 	}
 }
 
-func TestSaveMarkdownDialogWritesChosenPath(t *testing.T) {
+// TestExportAllMarkdownSingleNote: a one-element slice is the single-note
+// export path (same picker + naming as bulk).
+func TestExportAllMarkdownSingleNote(t *testing.T) {
 	s := newTestStore(t)
 	dir := t.TempDir()
-	wanted := filepath.Join(dir, "out.md")
-	s.pickSavePath = func(name string) (string, error) { return wanted, nil }
-	path, err := s.SaveMarkdownDialog("default.md", "# hi\n")
-	if err != nil || path != wanted {
-		t.Fatalf("SaveMarkdownDialog: path=%q err=%v", path, err)
+	s.pickExportDir = func() (string, error) { return dir, nil }
+	got, err := s.ExportAllMarkdown([]MarkdownFile{{Name: "My note", Content: "# hi"}})
+	if err != nil || got != 1 {
+		t.Fatalf("single export: got=%d err=%v, want 1 nil", got, err)
 	}
-	data, err := os.ReadFile(wanted)
-	if err != nil || string(data) != "# hi\n" {
-		t.Errorf("file content mismatch: %q, err=%v", data, err)
-	}
-}
-
-func TestSaveMarkdownDialogCancel(t *testing.T) {
-	s := newTestStore(t)
-	s.pickSavePath = func(name string) (string, error) { return "", nil }
-	path, err := s.SaveMarkdownDialog("x.md", "body")
-	if err != nil || path != "" {
-		t.Fatalf("cancelled save: path=%q err=%v, want empty nil", path, err)
+	data, err := os.ReadFile(filepath.Join(dir, "My note.md"))
+	if err != nil || string(data) != "# hi" {
+		t.Errorf("single export content: %q, err=%v", data, err)
 	}
 }
 

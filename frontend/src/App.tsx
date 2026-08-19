@@ -20,7 +20,6 @@ import {
   onHide,
   onQuit,
   onOpenSettings,
-  saveMarkdownDialog,
   openMarkdownDialog,
   exportAllMarkdown,
 } from "./services/bridge";
@@ -245,18 +244,18 @@ export default function App() {
 
   /* ---------------- markdown export / import ---------------- */
 
-  // Single note → .md via the native save dialog. Uses the persisted blocks
-  // (App state) rather than the editor's live document, so it stays correct
-  // even while a debounced save is pending.
+  // Single note → .md into a user-picked folder (defaulting to Downloads),
+  // named after the note title. Uses the persisted blocks (App state) rather
+  // than the editor's live document, so it stays correct even while a
+  // debounced save is pending.
   const exportNoteMarkdown = useCallback(
     async (note: Note) => {
       const converter = converterRef.current;
       if (!converter) return;
       const name = (titleFor(note) || t.untitled).trim() || "Untitled";
-      await saveMarkdownDialog(
-        `${name}.md`,
-        converter.blocksToMarkdown(note.blocks as Block[]),
-      ).catch(reportSaveError);
+      await exportAllMarkdown([
+        { name, content: converter.blocksToMarkdown(note.blocks as Block[]) },
+      ]).catch(reportSaveError);
     },
     [reportSaveError, titleFor],
   );

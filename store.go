@@ -82,10 +82,11 @@ type Store struct {
 	// toggle hotkey while the user records a new combo in the settings panel.
 	hotkeySuspend func() error
 	hotkeyResume  func() error
-	// pickDir opens the native folder picker (Windows).
+	// pickDir opens the native folder picker (Windows) for data migration.
 	pickDir func() (string, error)
-	// pickSavePath opens the native save-file dialog; "" = user cancelled.
-	pickSavePath func(defaultName string) (string, error)
+	// pickExportDir opens the native folder picker for .md export, defaulting
+	// to the user's Downloads folder; "" = user cancelled.
+	pickExportDir func() (string, error)
 	// pickOpenPath opens the native file-open dialog; "" = user cancelled.
 	pickOpenPath func() (string, error)
 }
@@ -462,22 +463,6 @@ type MarkdownFile struct {
 	Content string `json:"content"`
 }
 
-// SaveMarkdownDialog shows the native save dialog and writes content to the
-// chosen file. Returns the saved path ("" when the user cancels).
-func (s *Store) SaveMarkdownDialog(defaultName, content string) (string, error) {
-	if s.pickSavePath == nil {
-		return "", fmt.Errorf("save dialog unavailable")
-	}
-	path, err := s.pickSavePath(defaultName)
-	if err != nil || path == "" {
-		return path, err
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return "", fmt.Errorf("write file: %w", err)
-	}
-	return path, nil
-}
-
 // OpenMarkdownDialog shows the native open dialog (markdown/text filter) and
 // returns the chosen file's content ("" when the user cancels or the file is
 // empty).
@@ -497,14 +482,16 @@ func (s *Store) OpenMarkdownDialog() (string, error) {
 }
 
 // ExportAllMarkdown writes every note as its own .md file into a folder the
-// user picks. Returns the number of files written (0 when the user cancels).
-// Colliding names get a numeric suffix; invalid filename characters are
-// replaced so the export can never fail on the target filesystem.
+// user picks (defaulting to Downloads). Single-note export passes a
+// one-element slice. Returns the number of files written (0 when the user
+// cancels). Colliding names get a numeric suffix; invalid filename
+// characters are replaced so the export can never fail on the target
+// filesystem.
 func (s *Store) ExportAllMarkdown(files []MarkdownFile) (int, error) {
-	if s.pickDir == nil {
+	if s.pickExportDir == nil {
 		return 0, fmt.Errorf("folder picker unavailable")
 	}
-	dir, err := s.pickDir()
+	dir, err := s.pickExportDir()
 	if err != nil {
 		return 0, err
 	}

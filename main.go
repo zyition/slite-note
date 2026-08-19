@@ -182,12 +182,16 @@ func main() {
 			PromptForSingleSelection()
 		return result, err
 	}
-	store.pickSavePath = func(defaultName string) (string, error) {
-		return app.Dialog.SaveFile().
-			SetFilename(defaultName).
-			AddFilter("Markdown", "*.md").
-			AttachToWindow(mainWindow).
-			PromptForSingleSelection()
+	store.pickExportDir = func() (string, error) {
+		dlg := app.Dialog.OpenFile().
+			CanChooseDirectories(true).
+			CanChooseFiles(false).
+			SetTitle("Select export folder").
+			AttachToWindow(mainWindow)
+		if dir := userDownloadsDir(); dir != "" {
+			dlg = dlg.SetDirectory(dir)
+		}
+		return dlg.PromptForSingleSelection()
 	}
 	store.pickOpenPath = func() (string, error) {
 		return app.Dialog.OpenFile().
@@ -333,6 +337,19 @@ func resumeToggleHotkey() error {
 	suspendedHotkey = ""
 	debugLog("hotkey resumed: %s", activeHotkey)
 	return nil
+}
+
+// userDownloadsDir returns the user's Downloads folder via the known-folder
+// API (honours a redirected Downloads location), falling back to
+// <home>/Downloads, then "" (no default directory) if neither resolves.
+func userDownloadsDir() string {
+	if d, err := windows.KnownFolderPath(windows.FOLDERID_Downloads, 0); err == nil && d != "" {
+		return d
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, "Downloads")
+	}
+	return ""
 }
 
 // positionWindowAtStartup restores the window to its last saved bounds

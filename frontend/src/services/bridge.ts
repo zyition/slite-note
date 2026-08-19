@@ -141,28 +141,6 @@ export async function currentDataDir(): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 /**
- * Save a markdown file via the native save dialog. Resolves to the saved
- * path, or "" when the user cancels. Browser fallback downloads via an
- * anchor and resolves to the default name.
- */
-export async function saveMarkdownDialog(
-  defaultName: string,
-  content: string,
-): Promise<string> {
-  if (await isNative()) {
-    return await Store.SaveMarkdownDialog(defaultName, content);
-  }
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = defaultName;
-  a.click();
-  URL.revokeObjectURL(url);
-  return defaultName;
-}
-
-/**
  * Pick and read a markdown/text file via the native open dialog. Resolves to
  * the file content, or "" when the user cancels (or the file is empty).
  * Browser fallback uses a hidden <input type="file">.
@@ -188,9 +166,10 @@ export async function openMarkdownDialog(): Promise<string> {
 }
 
 /**
- * Export every note as its own .md file into a user-picked folder. Resolves
- * to the number of files written (0 when the user cancels). Browser fallback
- * downloads each note as a separate file.
+ * Export every note as its own .md file into a user-picked folder
+ * (defaulting to Downloads in native mode). Resolves to the number of files
+ * written (0 when the user cancels). Single-note export passes a
+ * one-element array. Browser fallback downloads each file via an anchor.
  */
 export async function exportAllMarkdown(
   files: { name: string; content: string }[],
