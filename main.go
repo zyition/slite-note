@@ -108,6 +108,20 @@ func main() {
 			// Default is %APPDATA%/<exe>.exe which is both ugly and roaming;
 			// put WebView2's user data (EBWebView cache) under LocalAppData.
 			WebviewUserDataPath: webviewDataPath(),
+			// Trim WebView2's background features we never use: Office Online
+			// web previews (msWebOOUI) and the built-in PDF viewer (msPdfOOUI).
+			// msSmartScreenProtection is already disabled by Wails by default.
+			// (Sticky notes render only local HTML; see WebView2 performance docs.)
+			DisabledFeatures: []string{
+				"msWebOOUI",
+				"msPdfOOUI",
+			},
+			// Cap the V8 JS heap so it cannot balloon beyond what a note editor
+			// needs (BlockNote/ProseMirror is heavy; keep >= 96MB to avoid GC
+			// churn). No GPU flags: hardware acceleration must stay on.
+			AdditionalBrowserArgs: []string{
+				"--js-flags=--max-old-space-size=128",
+			},
 		},
 	})
 
