@@ -1,3 +1,9 @@
+## [0.4.0] - 2026-08-19
+
+### Features
+
+- Window bounds memory and markdown import/export
+- *(export)* Folder picker for markdown export, defaulting to Downloads
 ## [0.3.0] - 2026-08-19
 
 ### Features
