@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 	"unsafe"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/zyition/slite-note/internal/windowutil"
 	"golang.org/x/sys/windows"
 )
 
@@ -279,9 +279,10 @@ func registerToggleHotkey(combo string) {
 //  1. register the new combo (fails fast if invalid / already owned)
 //  2. only then unregister the old combo
 func reconfigureHotkey(newCombo string) error {
-	newCombo = strings.TrimSpace(newCombo)
-	if newCombo == "" {
-		return fmt.Errorf("hotkey must not be empty")
+	var err error
+	newCombo, err = windowutil.NormalizeHotkey(newCombo)
+	if err != nil {
+		return err
 	}
 	if newCombo == activeHotkey {
 		return nil
@@ -384,19 +385,16 @@ func positionWindowAtStartup() {
 
 // boundsVisible reports whether the given rect (physical pixels) overlaps any
 // screen's physical work area, so a window left on a disconnected monitor
-// falls back to the default placement instead of reopening off-screen.
+// falls back to the default placement instead of reopening off-screen. Pure
+// geometry lives in internal/windowutil (RectOverlapsAny) for unit-testing.
 func boundsVisible(x, y, w, h int) bool {
-	for _, s := range app.Screen.GetAll() {
+	all := app.Screen.GetAll()
+	screens := make([]windowutil.ScreenArea, 0, len(all))
+	for _, s := range all {
 		wa := s.PhysicalWorkArea
-		ox := max(x, wa.X)
-		oy := max(y, wa.Y)
-		ox2 := min(x+w, wa.X+wa.Width)
-		oy2 := min(y+h, wa.Y+wa.Height)
-		if ox2 > ox && oy2 > oy {
-			return true
-		}
+		screens = append(screens, windowutil.ScreenArea{X: wa.X, Y: wa.Y, Width: wa.Width, Height: wa.Height})
 	}
-	return false
+	return windowutil.RectOverlapsAny(x, y, w, h, screens)
 }
 
 // setWindowBounds moves/resizes the native window via SetWindowPos.
@@ -465,7 +463,6 @@ const (
 	wsExLayered   = 0x00080000
 	lwaAlpha      = 0x00000002
 	opacityMin    = 0.05
-	opacityFloor  = 0.3 // UI slider minimum; anything below means "not set"
 	swpNoZorder   = 0x0004
 	swpNoActivate = 0x0010
 )
@@ -526,11 +523,7 @@ func applyWindowOpacity() {
 		_ = setWindowOpacity(1)
 		return
 	}
-	op := store.currentSettings().Opacity
-	if op < opacityFloor || op > 1 {
-		op = 1 // unset or out of range: fully opaque
-	}
-	if err := setWindowOpacity(op); err != nil {
+	if err := setWindowOpacity(windowutil.ClampOpacity(store.currentSettings().Opacity)); err != nil {
 		debugLog("set opacity failed: %v", err)
 	}
 }

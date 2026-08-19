@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/zyition/slite-note/internal/windowutil"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -290,9 +291,10 @@ func (s *Store) SetWindowOpacityOverride(on bool) {
 // SaveSettings with the new combo. On any failure the previous binding is left
 // untouched.
 func (s *Store) SetHotkey(combo string) error {
-	combo = strings.TrimSpace(combo)
-	if combo == "" {
-		return fmt.Errorf("hotkey must not be empty")
+	var err error
+	combo, err = windowutil.NormalizeHotkey(combo)
+	if err != nil {
+		return err
 	}
 	if s.hotkeyReconfigure == nil {
 		// Browser fallback mode: nothing to register.
