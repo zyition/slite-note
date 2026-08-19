@@ -17,6 +17,9 @@ communicate in Chinese.
 - Mirrors (do not change): Go `GOPROXY=https://goproxy.cn,direct`;
   npm/pnpm registry `https://registry.npmmirror.com` (`frontend/.npmrc`).
 - wails3 CLI: `%USERPROFILE%\.local\bin\wails3.exe`.
+- git-cliff (changelog generation): installed via mise (`mise use -g git-cliff`);
+  run it from the Windows side like every other tool, e.g.
+  `git-cliff -o /tmp/preview.md` to preview the changelog.
 
 ## Build / verify
 
@@ -36,6 +39,25 @@ wails3 build          # → bin\slite-note.exe
   features (tray, hotkey, window placement). The browser fallback
   (`cd frontend && pnpm dev`, port 9245, host `0.0.0.0`) is used for UI
   verification from the WSL side via `http://172.28.176.1:9245`.
+
+## Releasing
+
+Cut a release by pushing a `vX.Y.Z` tag; the `release` workflow
+(`.github/workflows/release.yml`) does the rest automatically.
+
+1. Land the intended changes on `main` (Conventional Commits, see
+   `docs/commits.md`). Version bumps follow SemVer: `fix`/`perf` → patch,
+   `feat` → minor, breaking (`feat!` or `BREAKING CHANGE:`) → major.
+2. Preview the changelog before tagging (run via pwsh on Windows):
+   `git-cliff -o /tmp/preview.md`.
+3. Tag and push: `git tag vX.Y.Z` + `git push origin vX.Y.Z`.
+4. The workflow then regenerates `CHANGELOG.md` with git-cliff, uses the
+   new release's sections as the GitHub release body, commits the changelog
+   back to `main` (`docs: changelog for vX.Y.Z`), and builds/packages the
+   installer + portable zip.
+
+Do not hand-edit `CHANGELOG.md` — the workflow rewrites it from git history
+on every release. Put user-visible detail in commit bodies instead.
 
 ## Layout
 
@@ -73,3 +95,9 @@ wails3 build          # → bin\slite-note.exe
 - Chinese for agent–maintainer communication; English in code, comments and UI.
 - ADRs live in `docs/adr/` (format in `docs/adr/*.md`). Glossary in
   `CONTEXT.md` — keep it implementation-free.
+- **Commits must follow Conventional Commits** (full spec in
+  `docs/commits.md`): `type(scope): subject` in English imperative, body for
+  detail. CHANGELOG.md and the GitHub release notes are generated from commit
+  history by git-cliff (`cliff.toml`), so a malformed commit simply never
+  shows up in the changelog — `chore`/`ci`/`build`/`style` are filtered out
+  on purpose.

@@ -13,6 +13,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # git-cliff needs the full history + tags to build the changelog.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -41,6 +44,11 @@ jobs:
         shell: pwsh
         run: |
           echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
 
       - name: Set version from tag
         shell: pwsh
@@ -78,36 +86,38 @@ jobs:
         run: |
           Compress-Archive -Path bin\slite-note.exe -DestinationPath "bin\slite-note-${{ github.ref_name }}-windows-amd64.zip"
 
-      - name: Extract changelog section for release body
+      - name: Generate changelog and release body
         shell: pwsh
-        # Single source of truth for the release description: the Keep a
-        # Changelog section matching the tag (e.g. "## [0.2.0] - date"),
-        # written verbatim to release-body.md. A release without a matching
-        # section fails the job, so publishing always forces a changelog
-        # entry. Bottom link-definitions ([Unreleased]: …) are excluded.
+        # Single source of truth: the release tag (vX.Y.Z). git-cliff reads
+        # git history + Conventional Commits (cliff.toml) and regenerates
+        # CHANGELOG.md; the same run emits the release description for the
+        # GitHub release — no hand-maintained changelog section required.
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart('v')
-          $lines = Get-Content CHANGELOG.md
-          $inSection = $false
-          $out = [System.Collections.Generic.List[string]]::new()
-          foreach ($line in $lines) {
-              if ($line -match '^## \[') {
-                  if ($inSection) { break }  # reached the next section
-                  $inSection = $line -match "^## \[$([regex]::Escape($tag))\]( -.*)?$"
-                  if ($inSection) { $out.Add($line) }
-              }
-              elseif ($inSection -and $line -match '^\[[^\]]+\]: ') { break }  # link-definitions block
-              elseif ($inSection) { $out.Add($line) }
-          }
-          if ($out.Count -eq 0) {
-              Write-Error "CHANGELOG.md has no section for version $tag - add a '## [$tag]' section (Keep a Changelog format) before releasing."
-              exit 1
-          }
-          $body = $out -join [Environment]::NewLine
-          $body += [Environment]::NewLine + [Environment]::NewLine + '---' + [Environment]::NewLine + 'Full changelog: https://github.com/zyition/slite-note/blob/main/CHANGELOG.md'
+          git-cliff --tag "${{ github.ref_name }}" -o CHANGELOG.md
+          git-cliff --latest --tag "${{ github.ref_name }}" -o release-body.md
+          $body = Get-Content release-body.md -Raw
+          $body += "`n`n---`nFull changelog: https://github.com/zyition/slite-note/blob/master/CHANGELOG.md"
           Set-Content -Path release-body.md -Value $body -Encoding UTF8
-          Write-Host "Release body extracted from CHANGELOG.md:"
+          Write-Host "Release body:"
           Write-Host $body
+
+      - name: Commit regenerated CHANGELOG.md to the default branch
+        shell: pwsh
+        # Keep the repo changelog in sync with the release: the tag push runs
+        # on a detached HEAD, so switch to the default branch and push the
+        # regenerated file back. No-op when nothing changed.
+        run: |
+          $branch = "${{ github.event.repository.default_branch }}"
+          git fetch origin $branch
+          git checkout $branch
+          if (git diff --quiet -- CHANGELOG.md) {
+            Write-Host "CHANGELOG.md unchanged, nothing to commit"
+          } else {
+            git add CHANGELOG.md
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "docs: changelog for ${{ github.ref_name }}"
+            git push origin $branch
+            Write-Host "CHANGELOG.md committed to $branch"
+          }
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

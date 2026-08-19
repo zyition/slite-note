@@ -33,6 +33,10 @@ cd frontend && pnpm exec tsc --noEmit
 ## Submitting changes
 
 - Keep PRs small and focused — one change per PR.
+- **Commit messages must follow Conventional Commits** — see
+  [docs/commits.md](./docs/commits.md) for the type list, scope conventions
+  and AI-generated commit rules. The changelog is generated from commit
+  history, so a non-conventional commit disappears from it.
 - Update the docs that describe what you changed (README, AGENTS.md,
   THIRD_PARTY_NOTICES.md when adding dependencies).
 - Reference the issue your PR closes (`Closes #12`).
