@@ -39,7 +39,7 @@ type Settings struct {
 // release CI (release.yml) overwrites this constant from the git tag before
 // building, so it only serves as the fallback for local / non-release
 // builds; keep it at the last released version.
-const appVersion = "0.1.0"
+const appVersion = "0.2.0"
 
 const notesFileVersion = 1
 

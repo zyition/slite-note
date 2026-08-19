@@ -9,7 +9,7 @@ info:
   productName: "Slite Note" # The name of the application
   productIdentifier: "com.zyition.slite-note" # The unique product identifier
   description: "A minimal sticky-note desktop app with block-based rich text" # The application description
-  copyright: "(c) 2025, zyition" # Copyright text
+  copyright: "(c) 2026, zyition" # Copyright text
   comments: "slide + lite: a minimal sticky note that glides in and out" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)

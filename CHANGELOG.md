@@ -6,6 +6,12 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Open-source readiness cleanup: removed the internal spec (`req.md`), dropped
+  the China-only npm mirror from `frontend/.npmrc`, and unified the copyright
+  year to 2026 across license and build metadata.
+
 ## [0.2.0] - 2026-08-19
 
 ### Added
