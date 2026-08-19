@@ -3,6 +3,7 @@ import type { Block } from "@blocknote/core";
 import { TitleBar } from "./components/TitleBar";
 import { Editor } from "./components/Editor";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
 import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
 import { deriveTitle } from "./services/title";
@@ -29,6 +30,8 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(() => makeSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Whether the shortcut cheatsheet modal is up (drives the window-opacity lift).
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Whether the theme picker popover is up (drives the window-opacity lift).
   const [themePickerOpen, setThemePickerOpen] = useState(false);
 
@@ -96,8 +99,8 @@ export default function App() {
   // while open — translucency is only useful while editing content behind.
   useEffect(() => {
     if (!ready) return;
-    void setWindowOpacityOverride(settingsOpen || themePickerOpen);
-  }, [ready, settingsOpen, themePickerOpen]);
+    void setWindowOpacityOverride(settingsOpen || themePickerOpen || shortcutsOpen);
+  }, [ready, settingsOpen, themePickerOpen, shortcutsOpen]);
 
   /* ---------------- persistence ---------------- */
 
@@ -205,6 +208,17 @@ export default function App() {
     [persistSettings, settings],
   );
 
+  // Ctrl+Shift+T: cycle system → dark → gray → yellow → system.
+  const cycleTheme = useCallback(() => {
+    setSettings((prev) => {
+      const idx = THEME_NAMES.indexOf(prev.theme as ThemeName);
+      const next = THEME_NAMES[(idx + 1) % THEME_NAMES.length];
+      const s = { ...prev, theme: next };
+      saveSettings(s).catch(reportSaveError);
+      return s;
+    });
+  }, [reportSaveError]);
+
   const togglePin = useCallback(() => {
     setSettings((prev) => {
       const next = { ...prev, alwaysOnTop: !prev.alwaysOnTop };
@@ -247,6 +261,37 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [activeId]);
 
+  // App-level shortcuts: Ctrl+, opens settings, Ctrl+Shift+T cycles the
+  // theme, Ctrl+Shift+/ toggles the shortcut cheatsheet. Capture phase so
+  // they work even while the editor has focus.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey || e.metaKey) return;
+      if (e.ctrlKey && !e.shiftKey && e.key === ",") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSettingsOpen(true);
+        return;
+      }
+      if (!e.ctrlKey || !e.shiftKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "t") {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleTheme();
+        return;
+      }
+      // Ctrl+Shift+/ (reports as "?" on US layouts, "/" elsewhere).
+      if (e.key === "?" || e.key === "/") {
+        e.preventDefault();
+        e.stopPropagation();
+        setShortcutsOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [cycleTheme]);
+
   const titles = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of notes) m.set(n.id, titleFor(n));
@@ -278,6 +323,7 @@ export default function App() {
         onDeleteNote={deleteNote}
         onRenameNote={renameNote}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
         onHide={hide}
         onClose={hide}
       />
@@ -296,6 +342,11 @@ export default function App() {
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onChanged={persistSettings}
+      />
+      <ShortcutsPanel
+        open={shortcutsOpen}
+        hotkey={settings.hotkey}
+        onClose={() => setShortcutsOpen(false)}
       />
       {saveError && (
         <div className="pointer-events-none fixed inset-x-0 bottom-2 z-[110] flex justify-center">

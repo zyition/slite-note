@@ -1,4 +1,4 @@
-import { Minus, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import { Keyboard, Minus, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
 import type { Note, ThemeName } from "../types/note";
 import { t } from "../services/i18n";
 import { NotePicker } from "./NotePicker";
@@ -21,6 +21,7 @@ interface TitleBarProps {
   onDeleteNote: (id: string) => void;
   onRenameNote: (id: string, title: string) => void;
   onOpenSettings: () => void;
+  onOpenShortcuts: () => void;
   onHide: () => void;
   onClose: () => void;
 }
@@ -46,6 +47,7 @@ export function TitleBar(props: TitleBarProps) {
     onDeleteNote,
     onRenameNote,
     onOpenSettings,
+    onOpenShortcuts,
     onHide,
     onClose,
   } = props;
@@ -69,6 +71,10 @@ export function TitleBar(props: TitleBarProps) {
 
       <button className={iconBtn} onClick={onOpenSettings} title={t.settings}>
         <SettingsIcon size={13} />
+      </button>
+
+      <button className={iconBtn} onClick={onOpenShortcuts} title={t.shortcutsTitle}>
+        <Keyboard size={13} />
       </button>
 
       <button className={iconBtn} onClick={onTogglePin} title={t.alwaysOnTop} aria-pressed={pinned}>

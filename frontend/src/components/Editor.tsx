@@ -99,6 +99,25 @@ export function Editor({ note, blocknoteTheme, onChange }: EditorProps) {
     };
   }, [editor, placeCaret]);
 
+  // Ctrl+Enter toggles the checklist item under the caret (Notion/Typora
+  // convention). BlockNote has no built-in binding and the slash menu does
+  // not show this, so we handle it ourselves. Capture phase: it must work
+  // even when ProseMirror has focus.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey || e.key !== "Enter") return;
+      const { block } = editor.getTextCursorPosition();
+      if (block.type !== "checkListItem") return;
+      e.preventDefault();
+      e.stopPropagation();
+      editor.updateBlock(block.id, {
+        props: { checked: !(block.props as { checked?: boolean }).checked },
+      });
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [editor]);
+
   return (
     <div
       className="h-full"

@@ -44,6 +44,25 @@ const en = {
   opacitySection: "Window opacity",
   opacityDesc: "Make the window see-through. 100% is fully opaque.",
 
+  // Shortcut cheatsheet
+  shortcutsTitle: "Keyboard shortcuts",
+  shortcutGroupGlobal: "Global",
+  shortcutGroupApp: "App",
+  shortcutGroupFormatting: "Formatting",
+  sToggleWindow: "Show / Hide slite",
+  sNextNote: "Next note",
+  sPrevNote: "Previous note",
+  sOpenSettings: "Open settings",
+  sCycleTheme: "Cycle theme",
+  sShowShortcuts: "Show shortcut cheatsheet",
+  sBold: "Bold",
+  sItalic: "Italic",
+  sStrike: "Strikethrough",
+  sInlineCode: "Inline code",
+  sCheckItem: "Toggle checkbox",
+  sUndo: "Undo",
+  sRedo: "Redo",
+
   // About section
   aboutSection: "About",
   versionLabel: "Version",
