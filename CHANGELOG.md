@@ -6,6 +6,35 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-19
+
+### Fixed
+
+- Floating toolbar buttons (bold, color, alignment, links) now work — the
+  old click-anywhere handler stole focus from the toolbar and cleared the
+  selection.
+- Block drag-handle menu (Delete / Colors) is no longer squashed to 16px by
+  an over-broad CSS rule.
+
+### Added
+
+- Caret continuity: the caret position is remembered when the window loses
+  focus and restored on refocus or hotkey/tray summon, falling back to the
+  document end.
+- Trailing block fills the editor's remaining height — clicking below the
+  content creates a new block.
+
+### Changed
+
+- Editor UI now uses BlockNote/Mantine defaults with theme tokens only;
+  compact left/right gutters for the sticky-note layout; drag handle uses
+  BlockNote's own 6-dot grip.
+
+### Removed
+
+- Media blocks (image / video / audio / file) from the schema until an
+  attachment pipeline exists.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
