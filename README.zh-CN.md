@@ -2,7 +2,6 @@
 
 极简桌面便签应用：单窗口承载 BlockNote 块级富文本编辑，本地持久化，窗口支持隐藏/唤起与全局快捷键。随开随记、不打扰。
 
-> **slite-note** = *slide* + *lite*：可滑动渐入渐出的极简便签（渐入渐出动效在路线图中）。
 > 本应用与 [slite.com](https://slite.com) 无关。
 
 [English](./README.md)
@@ -72,14 +71,6 @@ cd frontend && pnpm dev         # http://localhost:9245
 | 前端 | Vite + React 19 + TypeScript + Tailwind v4 | CSS-first，无 tailwind.config.js |
 | 编辑器 | BlockNote 0.54 | `/` 菜单、拖拽把手、气泡工具栏 |
 | 图标 | lucide-react | |
-
-## 路线图
-
-- slide 渐入渐出动效（slite-note 的 "slide"）
-- 标题手动覆盖（数据模型已就绪）
-- 窗口尺寸/位置记忆
-- macOS / Linux 移植
-- `scoop` / `winget` 收录
 
 ## 参与贡献
 

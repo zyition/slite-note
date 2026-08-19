@@ -50,7 +50,7 @@ const en = {
   homepageLabel: "Homepage",
   licenseLabel: "License",
   aboutDesc:
-    "slite-note = slide + lite. A minimal sticky note that glides in and out. Built with Wails, BlockNote, React, Tailwind and lucide.",
+    "slite-note. A minimal sticky note for Windows. Built with Wails, BlockNote, React, Tailwind and lucide.",
 };
 
 export const t: typeof en = en;

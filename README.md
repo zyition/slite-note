@@ -5,8 +5,6 @@ block-based rich-text editor (BlockNote); notes are stored locally as a single
 JSON file. The window hides and summons with a global hotkey — an always-ready
 scratchpad that stays out of your way.
 
-> **slite-note** = *slide* + *lite*: a lightweight sticky note that glides in
-> and out. (The slide animation is on the roadmap.)
 > This project is not affiliated with [slite.com](https://slite.com).
 
 [中文说明](./README.zh-CN.md)
@@ -85,14 +83,6 @@ runtime. Your notes never leave your machine.
 | Frontend | Vite + React 19 + TypeScript + Tailwind v4 | CSS-first, no tailwind config |
 | Editor | BlockNote 0.54 | `/` menu, drag handle, bubble toolbar |
 | Icons | lucide-react | |
-
-## Roadmap
-
-- Slide in/out animation (the "slide" in slite-note)
-- Title override per note (data model ready)
-- Window size/position memory
-- macOS / Linux ports
-- `scoop` / `winget` manifests
 
 ## Contributing
 
