@@ -10,6 +10,7 @@ const en = {
   notes: "Notes",
   alwaysOnTop: "Always on top",
   theme: "Theme",
+  themeFollowsOs: "Follows the OS",
   hide: "Hide",
   close: "Hide to tray",
   settings: "Settings",

@@ -124,6 +124,16 @@ export function SetHotkey(combo: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetWindowOpacityOverride temporarily forces the window fully opaque while
+ * an app-modal overlay (settings panel, theme picker) is open, so the
+ * translucent backdrop does not muddy the overlay UI. on=false restores the
+ * persisted opacity. No-op in browser fallback (the frontend never calls it).
+ */
+export function SetWindowOpacityOverride(on: boolean): $CancellablePromise<void> {
+    return $Call.ByID(602956902, on);
+}
+
+/**
  * SuspendHotkey temporarily unregisters the global toggle hotkey while the
  * user records a new combo in the settings panel, so pressing the old combo
  * mid-recording cannot toggle the window. No-op in browser fallback.

@@ -1,5 +1,4 @@
 import type { ThemeName } from "../types/note";
-import { THEME_NAMES } from "../types/note";
 
 export interface ThemeDef {
   /** CSS variables applied via [data-theme] (see index.css). */
@@ -26,10 +25,10 @@ export function systemPrefersDark(): boolean {
 
 /**
  * Resolve a theme choice to a concrete theme name. "system" follows the OS
- * preference: dark OS → dark theme, light OS → the default yellow sticky.
+ * preference: dark OS → dark theme, light OS → gray theme.
  */
 export function resolveTheme(choice: ThemeName): Exclude<ThemeName, "system"> {
-  if (choice === "system") return systemPrefersDark() ? "dark" : "yellow";
+  if (choice === "system") return systemPrefersDark() ? "dark" : "gray";
   return choice;
 }
 
@@ -41,8 +40,28 @@ export function onSystemThemeChange(cb: () => void): () => void {
   return () => mq.removeEventListener("change", h);
 }
 
-/** Cycle through system → yellow → system. */
-export function cycleTheme(current: ThemeName): ThemeName {
-  const i = THEME_NAMES.indexOf(current);
-  return THEME_NAMES[(i + 1) % THEME_NAMES.length];
+/** Short display name of a concrete theme (theme-picker rows). */
+export function themeName(theme: Exclude<ThemeName, "system">): string {
+  switch (theme) {
+    case "dark":
+      return "Dark";
+    case "gray":
+      return "Gray";
+    case "yellow":
+      return "Yellow";
+  }
+}
+
+/** CSS colour of a theme's swatch (matches its --bg). */
+export function themeSwatch(theme: Exclude<ThemeName, "system">): string {
+  const [r, g, b] = THEMES[theme].rgb;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** Full label for the picker trigger tooltip, e.g. "System (Dark)". */
+export function themeLabel(
+  choice: ThemeName,
+  applied: Exclude<ThemeName, "system">,
+): string {
+  return choice === "system" ? `System (${themeName(applied)})` : themeName(applied);
 }

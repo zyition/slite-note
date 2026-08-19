@@ -1,7 +1,8 @@
-import { Minus, Palette, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
-import type { Note } from "../types/note";
+import { Minus, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import type { Note, ThemeName } from "../types/note";
 import { t } from "../services/i18n";
 import { NotePicker } from "./NotePicker";
+import { ThemePicker } from "./ThemePicker";
 
 interface TitleBarProps {
   notes: Note[];
@@ -10,7 +11,12 @@ interface TitleBarProps {
   pinned: boolean;
   onSelect: (id: string) => void;
   onNewNote: () => void;
-  onCycleTheme: () => void;
+  /** User's persisted theme choice ("system" included). */
+  themeChoice: ThemeName;
+  /** Resolved concrete theme actually in effect. */
+  appliedTheme: Exclude<ThemeName, "system">;
+  onSelectTheme: (choice: ThemeName) => void;
+  onThemePickerOpenChange: (open: boolean) => void;
   onTogglePin: () => void;
   onDeleteNote: (id: string) => void;
   onRenameNote: (id: string, title: string) => void;
@@ -32,7 +38,10 @@ export function TitleBar(props: TitleBarProps) {
     pinned,
     onSelect,
     onNewNote,
-    onCycleTheme,
+    themeChoice,
+    appliedTheme,
+    onSelectTheme,
+    onThemePickerOpenChange,
     onTogglePin,
     onDeleteNote,
     onRenameNote,
@@ -70,9 +79,12 @@ export function TitleBar(props: TitleBarProps) {
         )}
       </button>
 
-      <button className={iconBtn} onClick={onCycleTheme} title={t.theme}>
-        <Palette size={13} />
-      </button>
+      <ThemePicker
+        choice={themeChoice}
+        applied={appliedTheme}
+        onSelect={onSelectTheme}
+        onOpenChange={onThemePickerOpenChange}
+      />
 
       <button className={iconBtn} onClick={onNewNote} title={t.newNote}>
         <Plus size={14} />

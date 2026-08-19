@@ -194,6 +194,18 @@ export async function setWindowBackground(r: number, g: number, b: number): Prom
   }
 }
 
+/**
+ * While an app-modal overlay is open (settings panel, theme picker) the
+ * window must not stay translucent: the user is not editing, and a
+ * see-through UI over a dimmed backdrop is messy. Forces the window fully
+ * opaque until released (no-op in browser fallback).
+ */
+export async function setWindowOpacityOverride(on: boolean): Promise<void> {
+  if (await isNative()) {
+    await Store.SetWindowOpacityOverride(on);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Events (Go → frontend)                                              */
 /* ------------------------------------------------------------------ */

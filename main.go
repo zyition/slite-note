@@ -45,6 +45,11 @@ var activeHotkey = ""
 // resumeToggleHotkey can restore it (unless a new combo was set meanwhile).
 var suspendedHotkey = ""
 
+// opacityOverride forces the window fully opaque while an app-modal overlay
+// (settings panel, theme picker) is open; while set, the persisted opacity is
+// not re-applied by SaveSettings or the window-change hooks.
+var opacityOverride = false
+
 // debugLog writes diagnostics to %APPDATA%/slite/log.txt (kept small: useful
 // while the app is headless).
 func debugLog(format string, args ...any) {
@@ -371,9 +376,27 @@ func setWindowOpacity(alpha float64) error {
 	return nil
 }
 
+// setOpacityOverride lifts the window to fully opaque while a modal overlay
+// is open and suppresses the persisted opacity until released. Releasing
+// restores whatever the user last set.
+func setOpacityOverride(on bool) {
+	opacityOverride = on
+	if on {
+		if err := setWindowOpacity(1); err != nil {
+			debugLog("set opacity (override) failed: %v", err)
+		}
+	} else {
+		applyWindowOpacity()
+	}
+}
+
 // applyWindowOpacity applies the persisted opacity (defaulting to opaque when
 // unset). Called at startup and from window-change hooks.
 func applyWindowOpacity() {
+	if opacityOverride {
+		_ = setWindowOpacity(1)
+		return
+	}
 	op := store.currentSettings().Opacity
 	if op < opacityFloor || op > 1 {
 		op = 1 // unset or out of range: fully opaque

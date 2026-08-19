@@ -6,7 +6,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
 import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
 import { deriveTitle } from "./services/title";
-import { THEMES, resolveTheme, cycleTheme as nextThemeName, onSystemThemeChange } from "./services/theme";
+import { THEMES, resolveTheme, onSystemThemeChange } from "./services/theme";
 import { t } from "./services/i18n";
 import {
   loadNotes,
@@ -14,6 +14,7 @@ import {
   saveNotes,
   saveSettings,
   setWindowBackground,
+  setWindowOpacityOverride,
   hideWindow,
   onHide,
   onQuit,
@@ -28,6 +29,8 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(() => makeSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Whether the theme picker popover is up (drives the window-opacity lift).
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
@@ -88,6 +91,13 @@ export default function App() {
     document.documentElement.dataset.theme = appliedTheme;
     void setWindowBackground(...THEMES[appliedTheme].rgb);
   }, [appliedTheme]);
+
+  // App-modal overlays (settings, theme picker) keep the window fully opaque
+  // while open — translucency is only useful while editing content behind.
+  useEffect(() => {
+    if (!ready) return;
+    void setWindowOpacityOverride(settingsOpen || themePickerOpen);
+  }, [ready, settingsOpen, themePickerOpen]);
 
   /* ---------------- persistence ---------------- */
 
@@ -188,13 +198,12 @@ export default function App() {
     onOpenSettings(() => setSettingsOpen(true));
   }, []);
 
-  const cycleTheme = useCallback(() => {
-    setSettings((prev) => {
-      const next = { ...prev, theme: nextThemeName(prev.theme as ThemeName) };
-      saveSettings(next).catch(reportSaveError);
-      return next;
-    });
-  }, [reportSaveError]);
+  const selectTheme = useCallback(
+    (choice: ThemeName) => {
+      persistSettings({ ...settings, theme: choice });
+    },
+    [persistSettings, settings],
+  );
 
   const togglePin = useCallback(() => {
     setSettings((prev) => {
@@ -261,7 +270,10 @@ export default function App() {
         pinned={settings.alwaysOnTop}
         onSelect={setActiveId}
         onNewNote={createNote}
-        onCycleTheme={cycleTheme}
+        themeChoice={settings.theme as ThemeName}
+        appliedTheme={appliedTheme}
+        onSelectTheme={selectTheme}
+        onThemePickerOpenChange={setThemePickerOpen}
         onTogglePin={togglePin}
         onDeleteNote={deleteNote}
         onRenameNote={renameNote}

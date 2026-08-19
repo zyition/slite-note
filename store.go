@@ -239,11 +239,21 @@ func (s *Store) SaveSettings(settings Settings) error {
 	}
 	if mainWindow != nil {
 		mainWindow.SetAlwaysOnTop(settings.AlwaysOnTop)
-		if err := setWindowOpacity(settings.Opacity); err != nil {
-			log.Printf("slite: set opacity: %v", err)
+		if !opacityOverride {
+			if err := setWindowOpacity(settings.Opacity); err != nil {
+				log.Printf("slite: set opacity: %v", err)
+			}
 		}
 	}
 	return nil
+}
+
+// SetWindowOpacityOverride temporarily forces the window fully opaque while
+// an app-modal overlay (settings panel, theme picker) is open, so the
+// translucent backdrop does not muddy the overlay UI. on=false restores the
+// persisted opacity. No-op in browser fallback (the frontend never calls it).
+func (s *Store) SetWindowOpacityOverride(on bool) {
+	setOpacityOverride(on)
 }
 
 // SetHotkey re-registers the global toggle hotkey (no-op in browser fallback,
