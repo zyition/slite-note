@@ -11,6 +11,7 @@ declare module "@wailsio/runtime" {
             "app:hide": string;
             "app:open-settings": string;
             "app:quit": string;
+            "app:show": string;
         }
     }
 }

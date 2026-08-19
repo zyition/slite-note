@@ -6,7 +6,7 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2025-08-19
+## [0.1.0] - 2026-08-19
 
 ### Added
 

@@ -105,7 +105,7 @@ Built with [Wails], [BlockNote], [React], [Tailwind CSS] and
 
 ## License
 
-[MIT](./LICENSE) © 2025 zyition
+[MIT](./LICENSE) © 2026 zyition
 
 [WebView2 runtime]: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 [Wails v3 CLI]: https://wails.io

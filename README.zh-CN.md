@@ -92,7 +92,7 @@ cd frontend && pnpm dev         # http://localhost:9245
 
 ## 许可
 
-[MIT](./LICENSE) © 2025 zyition
+[MIT](./LICENSE) © 2026 zyition
 
 [WebView2 运行时]: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 [Wails v3 CLI]: https://wails.io

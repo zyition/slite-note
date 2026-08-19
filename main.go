@@ -27,6 +27,7 @@ var trayIcon []byte
 // open the settings panel from the tray.
 func init() {
 	application.RegisterEvent[string]("app:hide")
+	application.RegisterEvent[string]("app:show")
 	application.RegisterEvent[string]("app:quit")
 	application.RegisterEvent[string]("app:open-settings")
 }
@@ -302,6 +303,17 @@ var positionedOnce = false
 // is positioned but never shown; the user summons it via hotkey or tray.
 var silentStart = false
 
+// showMainWindow makes the window visible and focused. It emits app:show so
+// the frontend can move the caret to the end of the note, ready to type — a
+// sticky note is summoned to be written in. Plain refocuses (the window stays
+// visible, e.g. the user alt-tabs back) do NOT emit this event, so the
+// frontend's caret memory / selection is never disturbed.
+func showMainWindow() {
+	app.Event.Emit("app:show", "")
+	mainWindow.Show()
+	mainWindow.Focus()
+}
+
 // showMainWindowAtStartup positions the window once the WebView2 has settled
 // and shows it (unless this is a silent launch). Runs at most once.
 func showMainWindowAtStartup() {
@@ -312,8 +324,7 @@ func showMainWindowAtStartup() {
 	positionWindowAtStartup()
 	applyWindowOpacity()
 	if !silentStart {
-		mainWindow.Show()
-		mainWindow.Focus()
+		showMainWindow()
 	}
 }
 
@@ -454,8 +465,7 @@ func toggleWindow() {
 	if mainWindow.IsVisible() {
 		hideWindow()
 	} else {
-		mainWindow.Show()
-		mainWindow.Focus()
+		showMainWindow()
 	}
 }
 

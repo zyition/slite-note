@@ -214,6 +214,11 @@ export function onHide(callback: () => void): void {
   if (native) Events.On("app:hide", callback);
 }
 
+/** Window shown (hotkey / tray) — the editor focuses the end for typing. */
+export function onShow(callback: () => void): void {
+  if (native) Events.On("app:show", callback);
+}
+
 export function onQuit(callback: () => void): void {
   if (native) Events.On("app:quit", callback);
 }

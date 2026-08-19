@@ -338,7 +338,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged }: SettingsPa
               </div>
             </div>
             <p className="text-[9px] leading-snug text-[var(--fg-muted)]">
-              © 2025 zyition · Built with Wails, BlockNote, React, Tailwind &amp; lucide.
+              © {new Date().getFullYear()} zyition · Built with Wails, BlockNote, React, Tailwind &amp; lucide.
             </p>
           </section>
         </div>
