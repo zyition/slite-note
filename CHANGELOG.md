@@ -1,3 +1,12 @@
+## [0.3.0] - 2026-08-19
+
+### Features
+
+- Add shortcut cheatsheet and new keyboard shortcuts
+
+### Documentation
+
+- Remove roadmap and drop slide-animation mentions
 ## [0.2.1] - 2026-08-19
 
 ### Bug Fixes
