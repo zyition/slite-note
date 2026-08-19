@@ -344,3 +344,18 @@ func TestSaveWindowBoundsReloadsFromDisk(t *testing.T) {
 		t.Fatalf("bounds not persisted to disk: %+v", loaded)
 	}
 }
+
+// TestAppVersionDefault guards the ldflags -X injection contract: appVersion
+// must never be empty, and a non-release build reports "dev" (a release build
+// overrides it via -ldflags "-X main.appVersion=vX.Y.Z"; CI passes the tag).
+func TestAppVersionDefault(t *testing.T) {
+	if appVersion == "" {
+		t.Fatal("appVersion must not be empty")
+	}
+	// Without -ldflags injection the default must be "dev", not a stale
+	// hard-coded release number (that was the regression: store.go shipped
+	// "0.2.0" while releases had moved on).
+	if appVersion != "dev" {
+		t.Fatalf("default appVersion = %q, want %q (release builds inject via ldflags)", appVersion, "dev")
+	}
+}

@@ -43,11 +43,12 @@ type Settings struct {
 	WindowHeight int `json:"windowHeight,omitempty"`
 }
 
-// appVersion is the user-facing version shown in the About section. The
-// release CI (release.yml) overwrites this constant from the git tag before
-// building, so it only serves as the fallback for local / non-release
-// builds; keep it at the last released version.
-const appVersion = "0.2.0"
+// appVersion is the user-facing version shown in the About section. It is
+// injected at build time via -ldflags "-X main.appVersion=vX.Y.Z" (the release
+// CI passes the git tag; see build/windows/Taskfile.yml), so a var (not const)
+// is required. "dev" marks a local / non-release build and is also what
+// `go run` / `go test` report.
+var appVersion = "dev"
 
 const notesFileVersion = 1
 
