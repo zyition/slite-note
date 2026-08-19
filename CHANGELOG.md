@@ -4,7 +4,7 @@ All notable changes to slite-note are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] - 2026-08-19
 
 ### Fixed
 
@@ -59,5 +59,6 @@ All notable changes to slite-note are documented here. Format follows
 - Silent installs no longer hang on invisible prompts (downgrade / running
   app) — `/SD` + `IfSilent` handling.
 
-[Unreleased]: https://github.com/zyition/slite-note/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/zyition/slite-note/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/zyition/slite-note/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/zyition/slite-note/releases/tag/v0.2.0
