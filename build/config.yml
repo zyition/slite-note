@@ -6,7 +6,7 @@ version: '3'
 # This information is used to generate the build assets.
 info:
   companyName: "zyition" # The name of the company
-  productName: "slite-note" # The name of the application
+  productName: "Slite Note" # The name of the application
   productIdentifier: "com.zyition.slite-note" # The unique product identifier
   description: "A minimal sticky-note desktop app with block-based rich text" # The application description
   copyright: "(c) 2025, zyition" # Copyright text

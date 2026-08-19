@@ -6,6 +6,41 @@ All notable changes to slite-note are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-19
+
+### Added
+
+- Single-instance guarantee: a second launch forwards its argv to the
+  running instance instead of starting a second process (Wails
+  `SingleInstance`). `slite-note.exe --quit` asks the running instance to
+  flush pending saves and exit gracefully — used by the installer before
+  upgrading. A plain second launch summons the hidden window.
+- Product naming: shortcuts, install dir, uninstall entry and version
+  resources now use **Slite Note** (the exe filename stays `slite-note.exe`);
+  stable space-free uninstall key `zyitionSliteNote`.
+
+### Changed
+
+- NSIS installer hardened (fork of the Wails template):
+  - Detects a running `slite-note.exe` before install/uninstall; prompts
+    interactively, or gracefully quits it via `--quit` in silent mode
+    (force-kill only as a bounded fallback).
+  - Upgrades locate the previous install (new + legacy uninstall keys),
+    reuse its directory, and run the old uninstaller first.
+  - Interactive downgrades are blocked; silent installs overwrite.
+  - Writes `InstallLocation` to the ARP registry key.
+- Installer/ARP `DisplayVersion` now comes from the release tag
+  (`windows:package VERSION=…`) instead of the hard-coded 0.1.0.
+- Uninstall removes only the install dir and WebView2 cache — user notes in
+  `%APPDATA%\slite` are kept.
+
+### Fixed
+
+- Overwrite install aborted with a file-in-use error when the previous
+  version was still running.
+- Silent installs no longer hang on invisible prompts (downgrade / running
+  app) — `/SD` + `IfSilent` handling.
+
 ## [0.1.2] - 2026-08-19
 
 ### Changed
@@ -74,7 +109,8 @@ All notable changes to slite-note are documented here. Format follows
 - Default WebView2 data path (`%APPDATA%\slite.exe` dir) replaced with a
   clean LocalAppData location.
 
-[Unreleased]: https://github.com/zyition/slite-note/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/zyition/slite-note/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zyition/slite-note/releases/tag/v0.2.0
 [0.1.2]: https://github.com/zyition/slite-note/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zyition/slite-note/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zyition/slite-note/releases/tag/v0.1.0

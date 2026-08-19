@@ -104,6 +104,20 @@ func main() {
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
+		// Single-instance guard: a second launch forwards its argv to the
+		// running instance instead of starting a second process. Two processes
+		// would race on notes.json (the store only mutexes within one process),
+		// and the window is designed to be hidden, so a second launch should
+		// summon it. Windows implementation: named mutex + hidden message-only
+		// window + WM_COPYDATA (see single_instance_windows.go in Wails).
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.zyition.slite-note",
+			// The installer runs "slite-note.exe --quit" before upgrading so
+			// the running instance can flush pending saves and exit gracefully
+			// (releasing the exe file lock) instead of being force-killed.
+			OnSecondInstanceLaunch: onSecondInstanceLaunch,
+			ExitCode:              0,
+		},
 		Windows: application.WindowsOptions{
 			// Default is %APPDATA%/<exe>.exe which is both ugly and roaming;
 			// put WebView2's user data (EBWebView cache) under LocalAppData.
@@ -190,6 +204,33 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// onSecondInstanceLaunch handles a second process launch (Windows: named
+// mutex + WM_COPYDATA notification carrying the second instance's argv).
+func onSecondInstanceLaunch(data application.SecondInstanceData) {
+	for _, a := range data.Args {
+		switch a {
+		case "--quit":
+			// The installer asks the running instance to exit gracefully
+			// before overwriting the exe: flush pending auto-saves, then
+			// quit. Force-killing would risk losing the last keystrokes.
+			debugLog("second instance requested quit")
+			app.Event.Emit("app:quit", "")
+			time.Sleep(250 * time.Millisecond)
+			app.Quit()
+			return
+		case "--silent":
+			// Auto-start raced with a manual launch: leave the first
+			// instance's visibility untouched (a silent start must never pop
+			// the window).
+			debugLog("second instance was silent; ignoring")
+			return
+		}
+	}
+	// A plain second launch means the user started the app again (e.g. from
+	// the Start menu): bring the window up, matching the hide/summon model.
+	showMainWindow()
 }
 
 // toggleHotkeyCallback toggles window visibility and logs the event.

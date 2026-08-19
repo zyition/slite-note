@@ -68,7 +68,10 @@ jobs:
       - name: Package NSIS installer (per-user)
         env:
           PACKAGE_MANAGER: pnpm
-        run: wails3 task windows:package INSTALL_SCOPE=user
+        # VERSION propagates the tag to INFO_PRODUCTVERSION so the installer
+        # and the ARP registry DisplayVersion match the built exe (the stock
+        # wails_tools.nsh hard-codes 0.1.0).
+        run: wails3 task windows:package INSTALL_SCOPE=user VERSION=$ver
 
       - name: Build portable zip
         shell: pwsh

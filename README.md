@@ -36,7 +36,7 @@ scratchpad that stays out of your way.
 
 | Channel | How |
 |---|---|
-| GitHub Releases | `slite-note-setup.exe` (NSIS installer) or portable `slite-note-<ver>-windows-amd64.zip` |
+| GitHub Releases | `slite-note-amd64-installer.exe` (NSIS installer) or portable `slite-note-<ver>-windows-amd64.zip` |
 | From source | see [Building](#building) |
 
 > The portable zip needs WebView2 already installed. The installer will set it
