@@ -39,12 +39,25 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec tsc --noEmit
 
+      - name: Frontend unit tests (vitest)
+        working-directory: frontend
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: pnpm test
+
       - name: Build frontend (for go:embed)
         working-directory: frontend
         run: pnpm exec vite build
 
       - name: Go vet
         run: go vet .
+
+      - name: Go tests
+        # ./... covers both the main package (store tests) and
+        # internal/windowutil (pure Win32-adjacent logic). build/ios is a
+        # cross-compile placeholder but its files carry ios build tags, so it
+        # compiles cleanly on windows-latest.
+        run: go test ./...
 
       - name: wails build
         env:

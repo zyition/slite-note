@@ -26,7 +26,7 @@ function blockText(block: any): string {
   const content = block.content;
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
+    const joined = content
       .map((item: any) => {
         if (typeof item === "string") return item;
         if (item && typeof item === "object") {
@@ -36,6 +36,9 @@ function blockText(block: any): string {
         return "";
       })
       .join("");
+    // An empty content array (e.g. an empty list item) must not short-circuit
+    // the children recursion below — the container may still hold text.
+    if (joined.trim()) return joined;
   }
   // Recurse into children in case the first block is an empty container.
   if (Array.isArray(block.children)) {
