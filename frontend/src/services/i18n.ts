@@ -17,9 +17,10 @@ const en = {
   saveFailed: "Failed to save note",
   loadFailed: "Failed to load notes",
 
-  // Note picker: delete
+  // Note picker: delete / rename
   deleteNote: "Delete note",
   deleteConfirm: "Delete?",
+  renameNote: "Rename note",
 
   // Settings panel
   settingsTitle: "Settings",

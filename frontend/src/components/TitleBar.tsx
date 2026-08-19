@@ -13,6 +13,7 @@ interface TitleBarProps {
   onCycleTheme: () => void;
   onTogglePin: () => void;
   onDeleteNote: (id: string) => void;
+  onRenameNote: (id: string, title: string) => void;
   onOpenSettings: () => void;
   onHide: () => void;
   onClose: () => void;
@@ -34,6 +35,7 @@ export function TitleBar(props: TitleBarProps) {
     onCycleTheme,
     onTogglePin,
     onDeleteNote,
+    onRenameNote,
     onOpenSettings,
     onHide,
     onClose,
@@ -50,6 +52,7 @@ export function TitleBar(props: TitleBarProps) {
         titleFor={titleFor}
         onSelect={onSelect}
         onDeleteNote={onDeleteNote}
+        onRenameNote={onRenameNote}
       />
 
       {/* Empty drag zone: everything between the picker and the buttons drags the window. */}

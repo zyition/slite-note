@@ -159,6 +159,22 @@ export default function App() {
     [activeId, scheduleSave],
   );
 
+  // Manual title override: "" restores the derived first-line title.
+  const renameNote = useCallback(
+    (id: string, title: string) => {
+      const prev = notesRef.current;
+      const existing = prev.find((n) => n.id === id);
+      if (!existing || existing.title === title) return;
+      const next = prev.map((n) =>
+        n.id === id ? { ...n, title, updatedAt: Date.now() } : n,
+      );
+      notesRef.current = next;
+      setNotes(next);
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
+
   const persistSettings = useCallback(
     (next: Settings) => {
       setSettings(next);
@@ -198,6 +214,30 @@ export default function App() {
     [],
   );
 
+  /* ---------------- quick switching (Ctrl+Tab / Ctrl+Shift+Tab) ------------- */
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Deliberately ignore Alt/Meta so Alt+Tab (OS) and Ctrl+Meta+Tab never
+      // collide; Shift only flips the direction.
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key !== "Tab") return;
+      const list = notesRef.current;
+      if (list.length < 2) return;
+      let idx = list.findIndex((n) => n.id === activeId);
+      if (idx < 0) idx = 0;
+      const dir = e.shiftKey ? -1 : 1;
+      const next = list[(idx + dir + list.length) % list.length];
+      // Capture phase + stopPropagation: BlockNote may also handle Tab;
+      // the combo must switch notes even while the editor has focus.
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveId(next.id);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeId]);
+
   const titles = useMemo(() => {
     const m = new Map<string, string>();
     for (const n of notes) m.set(n.id, titleFor(n));
@@ -224,6 +264,7 @@ export default function App() {
         onCycleTheme={cycleTheme}
         onTogglePin={togglePin}
         onDeleteNote={deleteNote}
+        onRenameNote={renameNote}
         onOpenSettings={() => setSettingsOpen(true)}
         onHide={hide}
         onClose={hide}

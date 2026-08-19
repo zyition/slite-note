@@ -13,8 +13,16 @@ _Avoid_: Sticky, memo, 记事
 _Avoid_: 便签列表, collection
 
 **Title**:
-Note 的显示名。默认取首行文本截断；手动覆盖为后续迭代能力。
+Note 的显示名。默认取首行文本截断（deriveTitle）；可在 NotePicker 中手动重命名覆盖，覆盖名为空时回退到首行派生。
 _Avoid_: 标题字段, heading
+
+**Rename**:
+在 NotePicker 行上点击铅笔进入内联编辑，Enter/失焦提交，Escape 取消；清空提交即清除覆盖。
+_Avoid_: 重命名（作为动词短语）, title override（作为 UI 概念）
+
+**Quick Switch**:
+窗口内 `Ctrl+Tab` / `Ctrl+Shift+Tab` 循环切换 Note（编辑器聚焦时同样生效）。
+_Avoid_: 标签页切换, tab switching
 
 **Theme**:
 全局（非每便签）的配色方案：跟随系统深/浅色（system），或固定便签黄（yellow）。
