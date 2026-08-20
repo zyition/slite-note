@@ -22,6 +22,7 @@ Unicode true
 
 !include "LogicLib.nsh"
 !include "StrFunc.nsh"
+!include "nsDialogs.nsh"
 ${StrStr}
 ${UnStrStr}
 
@@ -91,6 +92,10 @@ ManifestDPIAware true
 !define MUI_FINISHPAGE_NOAUTOCLOSE # Wait on the INSTFILES page so the user can take a look into the details of the installation steps
 !define MUI_ABORTWARNING # This will warn the user if they exit from the installer.
 !define MUI_DIRECTORYPAGE_VERIFYONLEAVE # Reject invalid install directories.
+# Launch the app right after install; checked by default (uncheck to skip).
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch Slite Note"
+!define MUI_FINISHPAGE_RUN_CHECKED
 
 !insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
 # !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
@@ -99,6 +104,7 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
 !insertmacro MUI_UNPAGE_CONFIRM # Confirm uninstall page.
+!insertmacro MUI_UNPAGE_CUSTOM un.DeleteDataPage un.DeleteDataPageLeave # Ask whether to remove user data (default: keep).
 !insertmacro MUI_UNPAGE_INSTFILES # Uninstalling page
 
 !insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
@@ -117,6 +123,8 @@ Var PREV_INSTALL_DIR   ; install dir of a previous version ("" if none)
 Var PREV_UNINSTALLER   ; path to a previous version's uninstaller (quotes stripped)
 Var PREV_VERSION       ; DisplayVersion of a previous version ("" if none)
 Var APP_RUNNING        ; "1" while slite-note.exe is running
+Var DELETE_USER_DATA   ; "1" when the user opted to delete notes/settings on uninstall
+Var DeleteDataCheckbox ; handle of the "delete user data" checkbox
 
 # --- helpers ---------------------------------------------------------------
 
@@ -134,6 +142,22 @@ Function StripQuotes
     ${If} $1 == '"'
         StrCpy $0 $0 $2
     ${EndIf}
+FunctionEnd
+
+Function un.DeleteDataPage
+    !insertmacro MUI_HEADER_TEXT "Remove user data" "Optionally delete your notes and settings"
+    nsDialogs::Create 1018
+    Pop $0
+    ${NSD_CreateCheckBox} 0 0 100% 12u "Also delete your notes and settings ($AppData\slite)"
+    Pop $DeleteDataCheckbox
+    ${If} $DELETE_USER_DATA == 1
+        ${NSD_Check} $DeleteDataCheckbox
+    ${EndIf}
+    nsDialogs::Show
+FunctionEnd
+
+Function un.DeleteDataPageLeave
+    ${NSD_GetState} $DeleteDataCheckbox $DELETE_USER_DATA
 FunctionEnd
 
 # IsSliteNoteRunning: sets $APP_RUNNING to "1" if slite-note.exe is running.
@@ -338,9 +362,13 @@ Section "uninstall"
         ${EndIf}
     ${EndIf}
 
-    ; WebView2 cache only - user notes (%APPDATA%\slite) are intentionally kept.
+    ; WebView2 cache only - user notes (%APPDATA%\slite) are intentionally kept
+    ; unless the user opted in on the "Remove user data" page.
     RMDir /r "$LOCALAPPDATA\slite\webview"
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the legacy WebView2 DataPath
+    ${If} $DELETE_USER_DATA == 1
+        RMDir /r "$AppData\slite"
+    ${EndIf}
 
     RMDir /r $INSTDIR
 
