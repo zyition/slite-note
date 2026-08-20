@@ -1,4 +1,4 @@
-import { Keyboard, Minus, Pin, PinOff, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import { FilePlus, Keyboard, Minus, Pin, PinOff, Settings as SettingsIcon, X } from "lucide-react";
 import type { Note, ThemeName } from "../types/note";
 import { t } from "../services/i18n";
 import { NotePicker } from "./NotePicker";
@@ -72,16 +72,14 @@ export function TitleBar(props: TitleBarProps) {
         onImportNote={onImportNote}
       />
 
+      {/* Note action sits next to the note list, not among the window buttons:
+          a bare "+" there read as maximize next to minimize. */}
+      <button className={iconBtn} onClick={onNewNote} title={t.newNote}>
+        <FilePlus size={13} />
+      </button>
+
       {/* Empty drag zone: everything between the picker and the buttons drags the window. */}
       <div className="min-w-2 flex-1 self-stretch" aria-hidden="true" />
-
-      <button className={iconBtn} onClick={onOpenSettings} title={t.settings}>
-        <SettingsIcon size={13} />
-      </button>
-
-      <button className={iconBtn} onClick={onOpenShortcuts} title={t.shortcutsTitle}>
-        <Keyboard size={13} />
-      </button>
 
       <button className={iconBtn} onClick={onTogglePin} title={t.alwaysOnTop} aria-pressed={pinned}>
         {pinned ? (
@@ -98,8 +96,12 @@ export function TitleBar(props: TitleBarProps) {
         onOpenChange={onThemePickerOpenChange}
       />
 
-      <button className={iconBtn} onClick={onNewNote} title={t.newNote}>
-        <Plus size={14} />
+      <button className={iconBtn} onClick={onOpenShortcuts} title={t.shortcutsTitle}>
+        <Keyboard size={13} />
+      </button>
+
+      <button className={iconBtn} onClick={onOpenSettings} title={t.settings}>
+        <SettingsIcon size={13} />
       </button>
 
       <button className={iconBtn} onClick={onHide} title={t.hide}>

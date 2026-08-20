@@ -348,12 +348,18 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [activeId]);
 
-  // App-level shortcuts: Ctrl+, opens settings, Ctrl+Shift+T cycles the
-  // theme, Ctrl+Shift+/ toggles the shortcut cheatsheet. Capture phase so
-  // they work even while the editor has focus.
+  // App-level shortcuts: Ctrl+N new note, Ctrl+, opens settings, Ctrl+Shift+T
+  // cycles the theme, Ctrl+Shift+/ toggles the shortcut cheatsheet. Capture
+  // phase so they work even while the editor has focus.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
+      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        e.stopPropagation();
+        createNote();
+        return;
+      }
       if (e.ctrlKey && !e.shiftKey && e.key === ",") {
         e.preventDefault();
         e.stopPropagation();
@@ -377,7 +383,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cycleTheme]);
+  }, [cycleTheme, createNote]);
 
   const titles = useMemo(() => {
     const m = new Map<string, string>();

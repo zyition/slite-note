@@ -38,6 +38,7 @@ export const SHORTCUT_GROUPS: { id: ShortcutGroup; label: string }[] = [
  */
 export const APP_SHORTCUTS: ShortcutDef[] = [
   // App-level
+  { id: "new-note", keys: ["Ctrl+N"], label: t.sNewNote, group: "app" },
   { id: "next-note", keys: ["Ctrl+Tab"], label: t.sNextNote, group: "app" },
   { id: "prev-note", keys: ["Ctrl+Shift+Tab"], label: t.sPrevNote, group: "app" },
   { id: "open-settings", keys: ["Ctrl+,"], label: t.sOpenSettings, group: "app" },

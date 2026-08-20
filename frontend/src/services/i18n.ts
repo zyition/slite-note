@@ -62,6 +62,7 @@ const en = {
   sToggleWindow: "Show / Hide slite",
   sNextNote: "Next note",
   sPrevNote: "Previous note",
+  sNewNote: "New note",
   sOpenSettings: "Open settings",
   sCycleTheme: "Cycle theme",
   sShowShortcuts: "Show shortcut cheatsheet",
