@@ -12,7 +12,8 @@ import { t } from "./services/i18n";
 import {
   loadNotes,
   loadSettings,
-  saveNotes,
+  saveNote,
+  deleteNote as deleteNoteFile,
   saveSettings,
   setWindowBackground,
   setWindowOpacityOverride,
@@ -39,6 +40,10 @@ export default function App() {
 
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
+  // Snapshot of what the backend has persisted (by reference), used to
+  // diff-save: only notes whose blocks/title/updatedAt reference moved get
+  // written, ids that vanished get deleted.
+  const lastSavedRef = useRef<Map<string, Note>>(new Map());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -69,8 +74,9 @@ export default function App() {
       if (list.length === 0) {
         // First run: seed one empty note so the editor has a home.
         list = [makeNote()];
-        await saveNotes(list);
+        await saveNote(list[0]);
       }
+      lastSavedRef.current = new Map(list.map((n) => [n.id, n]));
       setNotes(list);
       setSettings({ ...makeSettings(), ...loadedSettings });
       setActiveId(list[list.length - 1]?.id ?? null);
@@ -109,20 +115,46 @@ export default function App() {
 
   /* ---------------- persistence ---------------- */
 
+  // Persist only what changed since the last successful save. React's
+  // immutable updates give us fresh references on every edit, so reference
+  // comparison is a reliable dirty marker (no timestamp-collision risk).
+  const persistChanges = useCallback(async () => {
+    const current = notesRef.current;
+    const last = lastSavedRef.current;
+    const next = new Map<string, Note>();
+    const dirty: Note[] = [];
+    for (const n of current) {
+      next.set(n.id, n);
+      const prev = last.get(n.id);
+      if (!prev || prev.blocks !== n.blocks || prev.title !== n.title || prev.updatedAt !== n.updatedAt) {
+        dirty.push(n);
+      }
+    }
+    try {
+      for (const id of last.keys()) {
+        if (!next.has(id)) await deleteNoteFile(id);
+      }
+      for (const n of dirty) await saveNote(n);
+      lastSavedRef.current = next;
+    } catch (err) {
+      reportSaveError(err);
+    }
+  }, [reportSaveError]);
+
   const scheduleSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      saveNotes(notesRef.current).catch(reportSaveError);
+      void persistChanges();
     }, SAVE_DEBOUNCE_MS);
-  }, [reportSaveError]);
+  }, [persistChanges]);
 
   const flushSave = useCallback(() => {
     if (!saveTimer.current) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = null;
-    saveNotes(notesRef.current).catch(reportSaveError);
-  }, [reportSaveError]);
+    void persistChanges();
+  }, [persistChanges]);
 
   // Flush pending saves when the window hides or the app quits.
   useEffect(() => {

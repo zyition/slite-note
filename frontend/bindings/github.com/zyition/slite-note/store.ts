@@ -41,6 +41,14 @@ export function CurrentDataDir(): $CancellablePromise<string> {
 }
 
 /**
+ * DeleteNote removes a note's file. Removing a missing note is not an error
+ * (idempotent, so a stale delete after a reload is harmless).
+ */
+export function DeleteNote(id: string): $CancellablePromise<void> {
+    return $Call.ByID(84314944, id);
+}
+
+/**
  * ExportAllMarkdown writes every note as its own .md file into a folder the
  * user picks (defaulting to Downloads). Single-note export passes a
  * one-element slice. Returns the number of files written (0 when the user
@@ -53,8 +61,11 @@ export function ExportAllMarkdown(files: $models.MarkdownFile[] | null): $Cancel
 }
 
 /**
- * LoadNotes reads all notes from disk. Returns an empty slice if the file does
- * not exist yet.
+ * LoadNotes reads all notes from disk (per-note files under notes/), sorting
+ * by CreatedAt so the list order is stable regardless of directory order. On
+ * the first read after an upgrade it migrates the legacy single-file
+ * notes.json into per-note files; a failed migration falls back to serving
+ * the legacy data and retries on the next call.
  */
 export function LoadNotes(): $CancellablePromise<$models.Note[] | null> {
     return $Call.ByID(2283733460);
@@ -121,11 +132,11 @@ export function ResumeHotkey(): $CancellablePromise<void> {
 }
 
 /**
- * SaveNotes persists the full note list atomically. Note deletion is handled
- * on the frontend (remove from list, then save the full list).
+ * SaveNote persists a single note atomically. Per-note files mean editing one
+ * note rewrites only that file, never the whole dataset.
  */
-export function SaveNotes(notes: $models.Note[] | null): $CancellablePromise<void> {
-    return $Call.ByID(1083769751, notes);
+export function SaveNote(note: $models.Note): $CancellablePromise<void> {
+    return $Call.ByID(882722846, note);
 }
 
 /**

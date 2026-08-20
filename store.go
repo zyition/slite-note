@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -154,7 +157,14 @@ func (s *Store) currentDataDir() string {
 	return s.dataDir
 }
 
-func (s *Store) notesPath() string    { return filepath.Join(s.dataDir, "notes.json") }
+func (s *Store) notesPath() string { return filepath.Join(s.dataDir, "notes.json") }
+
+// notesDir is the per-note layout: one <id>.json file per note. The legacy
+// single-file notes.json is migrated into it on first read (see LoadNotes).
+func (s *Store) notesDir() string { return filepath.Join(s.dataDir, "notes") }
+func (s *Store) notePath(id string) string {
+	return filepath.Join(s.notesDir(), id+".json")
+}
 func (s *Store) settingsPath() string { return filepath.Join(s.dataDir, "settings.json") }
 
 // --- bindings ---
@@ -194,21 +204,33 @@ func (s *Store) OpenURL(url string) error {
 	return nil
 }
 
-// LoadNotes reads all notes from disk. Returns an empty slice if the file does
-// not exist yet.
+// LoadNotes reads all notes from disk (per-note files under notes/), sorting
+// by CreatedAt so the list order is stable regardless of directory order. On
+// the first read after an upgrade it migrates the legacy single-file
+// notes.json into per-note files; a failed migration falls back to serving
+// the legacy data and retries on the next call.
 func (s *Store) LoadNotes() ([]Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// New layout: notes/ dir. One corrupt note file is skipped, not fatal.
+	if entries, err := os.ReadDir(s.notesDir()); err == nil {
+		return s.readNotesDir(entries)
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read notes dir: %w", err)
+	}
+
+	// Legacy single-file layout: migrate on first read.
 	data, err := os.ReadFile(s.notesPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []Note{}, nil
+			return []Note{}, nil // fresh install: nothing to migrate
 		}
 		return nil, fmt.Errorf("read notes: %w", err)
 	}
 	var f notesFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		// Corrupt notes file: back it up (never destroy user data), then start
+		// Corrupt legacy file: back it up (never destroy user data), then start
 		// fresh so the app still boots. The backup keeps the original bytes for
 		// manual recovery.
 		backup := filepath.Join(s.dataDir, "notes.json.corrupt-"+time.Now().Format("20060102-150405"))
@@ -222,16 +244,126 @@ func (s *Store) LoadNotes() ([]Note, error) {
 	if f.Notes == nil {
 		f.Notes = []Note{}
 	}
-	return f.Notes, nil
+	if err := s.migrateNotesFile(f.Notes); err != nil {
+		// Migration failed: serve the legacy data; the next LoadNotes retries.
+		log.Printf("slite: notes migration deferred: %v", err)
+		return sortNotesByCreatedAt(f.Notes), nil
+	}
+	return sortNotesByCreatedAt(f.Notes), nil
 }
 
-// SaveNotes persists the full note list atomically. Note deletion is handled
-// on the frontend (remove from list, then save the full list).
-func (s *Store) SaveNotes(notes []Note) error {
+// readNotesDir reads all per-note files, skipping unreadable or corrupt ones
+// (one bad note must not take the rest down). Caller holds s.mu.
+func (s *Store) readNotesDir(entries []os.DirEntry) ([]Note, error) {
+	notes := make([]Note, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(s.notesDir(), e.Name()))
+		if err != nil {
+			log.Printf("slite: skip unreadable note %s: %v", e.Name(), err)
+			continue
+		}
+		var n Note
+		if err := json.Unmarshal(data, &n); err != nil {
+			log.Printf("slite: skip corrupt note %s: %v", e.Name(), err)
+			continue
+		}
+		notes = append(notes, n)
+	}
+	return sortNotesByCreatedAt(notes), nil
+}
+
+// migrateNotesFile splits the legacy notes.json into per-note files. Each
+// note is written individually; only when all succeed is the legacy file
+// renamed to a backup. On any failure the partial notes/ dir is removed and
+// the legacy file left intact so a later call retries cleanly.
+// Caller holds s.mu.
+func (s *Store) migrateNotesFile(notes []Note) error {
+	if err := os.MkdirAll(s.notesDir(), 0o755); err != nil {
+		return fmt.Errorf("create notes dir: %w", err)
+	}
+	rollback := func() { _ = os.RemoveAll(s.notesDir()) }
+	for i := range notes {
+		n := &notes[i]
+		if n.ID == "" {
+			// Defensive: legacy data with a missing id gets a fresh one.
+			n.ID = randomID()
+		}
+		data, err := json.Marshal(n)
+		if err != nil {
+			rollback()
+			return fmt.Errorf("marshal note: %w", err)
+		}
+		if err := os.WriteFile(s.notePath(n.ID), data, 0o644); err != nil {
+			rollback()
+			return fmt.Errorf("write note file: %w", err)
+		}
+	}
+	backup := filepath.Join(s.dataDir, "notes.json.migrated-"+time.Now().Format("20060102-150405"))
+	if err := os.Rename(s.notesPath(), backup); err != nil {
+		rollback()
+		return fmt.Errorf("back up legacy notes file: %w", err)
+	}
+	log.Printf("slite: migrated %d notes to per-note files (backup %s)", len(notes), backup)
+	return nil
+}
+
+// sortNotesByCreatedAt orders notes oldest-first (new notes at the end),
+// matching the pre-migration list order.
+func sortNotesByCreatedAt(notes []Note) []Note {
+	sort.SliceStable(notes, func(i, j int) bool {
+		return notes[i].CreatedAt < notes[j].CreatedAt
+	})
+	return notes
+}
+
+// randomID returns a 32-hex-char id (defensive fallback for legacy notes
+// that lack an id; the frontend normally generates UUIDs).
+func randomID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("n%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+// SaveNote persists a single note atomically. Per-note files mean editing one
+// note rewrites only that file, never the whole dataset.
+func (s *Store) SaveNote(note Note) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f := notesFile{Version: notesFileVersion, Notes: notes}
-	return s.writeJSONAtomic(s.notesPath(), f)
+	if note.ID == "" {
+		return fmt.Errorf("note id is empty")
+	}
+	if err := os.MkdirAll(s.notesDir(), 0o755); err != nil {
+		return fmt.Errorf("create notes dir: %w", err)
+	}
+	data, err := json.MarshalIndent(note, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal note: %w", err)
+	}
+	path := s.notePath(note.ID)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write note temp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename note: %w", err)
+	}
+	return nil
+}
+
+// DeleteNote removes a note's file. Removing a missing note is not an error
+// (idempotent, so a stale delete after a reload is harmless).
+func (s *Store) DeleteNote(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.notePath(id)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete note: %w", err)
+	}
+	return nil
 }
 
 // LoadSettings reads persisted settings (falling back to defaults).
@@ -657,6 +789,11 @@ func (s *Store) validateDataDir(path string, forMove bool) error {
 			}
 			continue
 		default:
+			// Backup artifacts slite itself created (corrupt/migrated legacy
+			// notes.json) are tolerated, not foreign content.
+			if strings.HasPrefix(name, "notes.json.corrupt-") || strings.HasPrefix(name, "notes.json.migrated-") {
+				continue
+			}
 			return fmt.Errorf("directory contains files that don't belong to slite (%q)", e.Name())
 		}
 	}

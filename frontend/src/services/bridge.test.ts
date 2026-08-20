@@ -20,7 +20,8 @@ vi.mock("../../bindings/github.com/zyition/slite-note", () => ({
 import {
   loadNotes,
   loadSettings,
-  saveNotes,
+  saveNote,
+  deleteNote,
   saveSettings,
 } from "./bridge";
 import { makeSettings } from "../types/note";
@@ -48,10 +49,19 @@ describe("bridge localStorage fallback", () => {
     expect(await loadNotes()).toEqual([]);
   });
 
-  it("saveNotes + loadNotes round-trip", async () => {
-    const notes = [{ id: "a", title: "", blocks: [], createdAt: 1, updatedAt: 2 }];
-    await saveNotes(notes);
-    expect(await loadNotes()).toEqual(notes);
+  it("saveNote + loadNotes round-trip", async () => {
+    const note = { id: "a", title: "", blocks: [], createdAt: 1, updatedAt: 2 };
+    await saveNote(note);
+    expect(await loadNotes()).toEqual([note]);
+  });
+
+  it("saveNote upserts and deleteNote removes", async () => {
+    const a = { id: "a", title: "", blocks: [], createdAt: 1, updatedAt: 1 };
+    await saveNote(a);
+    await saveNote({ ...a, title: "edited", updatedAt: 2 });
+    expect(await loadNotes()).toEqual([{ ...a, title: "edited", updatedAt: 2 }]);
+    await deleteNote("a");
+    expect(await loadNotes()).toEqual([]);
   });
 
   it("loadNotes tolerates corrupt JSON", async () => {
@@ -76,7 +86,7 @@ describe("bridge localStorage fallback", () => {
   });
 
   it("uses the slite: namespaced keys", async () => {
-    await saveNotes([{ id: "x", title: "", blocks: [], createdAt: 1, updatedAt: 1 }]);
+    await saveNote({ id: "x", title: "", blocks: [], createdAt: 1, updatedAt: 1 });
     await saveSettings(makeSettings({ theme: "gray" }));
     expect(localStorage.getItem("slite:notes")).toContain('"id":"x"');
     expect(localStorage.getItem("slite:settings")).toContain('"theme":"gray"');

@@ -37,6 +37,10 @@ export async function loadNotes(): Promise<Note[]> {
   if (await isNative()) {
     return (await Store.LoadNotes()) ?? [];
   }
+  return loadNotesFromLocalStorage();
+}
+
+function loadNotesFromLocalStorage(): Note[] {
   try {
     const raw = localStorage.getItem(LS_NOTES);
     return raw ? (JSON.parse(raw) as Note[]) : [];
@@ -45,11 +49,27 @@ export async function loadNotes(): Promise<Note[]> {
   }
 }
 
-export async function saveNotes(notes: Note[]): Promise<void> {
+// Per-note persistence in native mode: editing a note rewrites only its own
+// file. The browser fallback keeps a whole-list localStorage write (no file
+// concerns there), which is what diff-save collapses to anyway.
+export async function saveNote(note: Note): Promise<void> {
   if (await isNative()) {
-    await Store.SaveNotes(notes);
+    await Store.SaveNote(note);
     return;
   }
+  const notes = loadNotesFromLocalStorage();
+  const idx = notes.findIndex((n) => n.id === note.id);
+  if (idx >= 0) notes[idx] = note;
+  else notes.push(note);
+  localStorage.setItem(LS_NOTES, JSON.stringify(notes));
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  if (await isNative()) {
+    await Store.DeleteNote(id);
+    return;
+  }
+  const notes = loadNotesFromLocalStorage().filter((n) => n.id !== id);
   localStorage.setItem(LS_NOTES, JSON.stringify(notes));
 }
 

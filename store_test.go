@@ -15,9 +15,9 @@ func newTestStore(t *testing.T) *Store {
 
 func TestSaveLoadNotesRoundTrip(t *testing.T) {
 	s := newTestStore(t)
-	notes := []Note{{ID: "a", Blocks: []map[string]any{{"type": "paragraph"}}, CreatedAt: 1, UpdatedAt: 2}}
-	if err := s.SaveNotes(notes); err != nil {
-		t.Fatalf("SaveNotes: %v", err)
+	note := Note{ID: "a", Blocks: []map[string]any{{"type": "paragraph"}}, CreatedAt: 1, UpdatedAt: 2}
+	if err := s.SaveNote(note); err != nil {
+		t.Fatalf("SaveNote: %v", err)
 	}
 	got, err := s.LoadNotes()
 	if err != nil {
@@ -25,6 +25,136 @@ func TestSaveLoadNotesRoundTrip(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "a" {
 		t.Fatalf("round trip mismatch: %+v", got)
+	}
+	// Per-note layout: the note lives in notes/<id>.json.
+	if _, err := os.Stat(filepath.Join(s.dataDir, "notes", "a.json")); err != nil {
+		t.Fatalf("expected notes/a.json: %v", err)
+	}
+}
+
+func TestSaveNoteDeleteNote(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveNote(Note{ID: "x", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteNote("x"); err != nil {
+		t.Fatalf("DeleteNote: %v", err)
+	}
+	got, err := s.LoadNotes()
+	if err != nil || len(got) != 0 {
+		t.Fatalf("after delete: got=%d err=%v, want empty", len(got), err)
+	}
+	// Deleting a missing note is idempotent, not an error.
+	if err := s.DeleteNote("x"); err != nil {
+		t.Fatalf("second DeleteNote should be idempotent: %v", err)
+	}
+	// Empty id is rejected.
+	if err := s.SaveNote(Note{ID: "", CreatedAt: 1}); err == nil {
+		t.Fatal("SaveNote with empty id must fail")
+	}
+}
+
+// TestMigrateNotesJsonToPerNote: the legacy single-file layout is split into
+// notes/<id>.json on first LoadNotes, and the original file is renamed to a
+// backup — never deleted.
+func TestMigrateNotesJsonToPerNote(t *testing.T) {
+	s := newTestStore(t)
+	legacy := `{"version":1,"notes":[{"id":"b","title":"two","blocks":[],"createdAt":2,"updatedAt":2},{"id":"a","title":"one","blocks":[],"createdAt":1,"updatedAt":1}]}`
+	if err := os.WriteFile(s.notesPath(), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.LoadNotes()
+	if err != nil {
+		t.Fatalf("LoadNotes after migration: %v", err)
+	}
+	// Sorted by createdAt regardless of legacy array order.
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
+		t.Fatalf("migrated+sorted notes mismatch: %+v", got)
+	}
+	// Per-note files exist; legacy file backed up (not deleted).
+	if _, err := os.Stat(filepath.Join(s.dataDir, "notes", "a.json")); err != nil {
+		t.Errorf("notes/a.json missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s.dataDir, "notes", "b.json")); err != nil {
+		t.Errorf("notes/b.json missing: %v", err)
+	}
+	entries, err := os.ReadDir(s.dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var backup string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "notes.json.migrated-") {
+			backup = e.Name()
+		}
+	}
+	if backup == "" {
+		t.Fatal("expected a notes.json.migrated-* backup")
+	}
+	// Second load reads per-note files and does not re-migrate.
+	got2, err := s.LoadNotes()
+	if err != nil || len(got2) != 2 {
+		t.Fatalf("second load: got=%d err=%v", len(got2), err)
+	}
+}
+
+// TestMigrateNotesJsonFillsMissingIDs: legacy data without an id gets one
+// during migration (defensive; the frontend normally generates UUIDs).
+func TestMigrateNotesJsonFillsMissingIDs(t *testing.T) {
+	s := newTestStore(t)
+	legacy := `{"version":1,"notes":[{"title":"no id","blocks":[],"createdAt":1,"updatedAt":1}]}`
+	if err := os.WriteFile(s.notesPath(), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadNotes()
+	if err != nil {
+		t.Fatalf("LoadNotes: %v", err)
+	}
+	if len(got) != 1 || got[0].ID == "" {
+		t.Fatalf("missing id not filled: %+v", got)
+	}
+}
+
+// TestLoadNotesSortsByCreatedAt: per-note files are read in arbitrary
+// directory order, so the result must be sorted explicitly.
+func TestLoadNotesSortsByCreatedAt(t *testing.T) {
+	s := newTestStore(t)
+	for _, n := range []Note{
+		{ID: "mid", CreatedAt: 5, UpdatedAt: 5},
+		{ID: "old", CreatedAt: 1, UpdatedAt: 1},
+		{ID: "new", CreatedAt: 9, UpdatedAt: 9},
+	} {
+		if err := s.SaveNote(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.LoadNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{got[0].ID, got[1].ID, got[2].ID}
+	if ids[0] != "old" || ids[1] != "mid" || ids[2] != "new" {
+		t.Fatalf("sort order mismatch: %v", ids)
+	}
+}
+
+// TestLoadNotesSkipsCorruptNote: one corrupt per-note file must not break
+// the rest (per-note isolation — the point of the layout).
+func TestLoadNotesSkipsCorruptNote(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveNote(Note{ID: "ok", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.dataDir, "notes", "bad.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadNotes()
+	if err != nil {
+		t.Fatalf("corrupt note should be skipped, not fatal: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "ok" {
+		t.Fatalf("expected only the healthy note: %+v", got)
 	}
 }
 
