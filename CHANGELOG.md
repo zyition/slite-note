@@ -1,3 +1,25 @@
+## [0.5.0] - 2026-08-20
+
+### Features
+
+- *(testing)* Add vitest unit tests and wire them into CI
+- *(installer)* Launch after install and optional user-data removal
+- *(ui)* Rework titlebar layout and add Ctrl+N for new note
+
+### Bug Fixes
+
+- *(version)* Inject appVersion via ldflags instead of source rewrite
+- *(installer)* Use MUI2 PageEx for the uninstall data page
+
+### Refactoring
+
+- *(win32)* Extract pure window logic into internal/windowutil
+- *(store)* Decouple data-dir pointer from settings
+- *(store)* Store notes as one file per note
+
+### Documentation
+
+- *(testing)* Add e2e test plan
 ## [0.4.0] - 2026-08-19
 
 ### Features
