@@ -7,12 +7,13 @@ import {
   appVersion,
   chooseDataDir,
   currentDataDir,
+  moveDataDir,
   openDataDir,
   openUrl,
   resumeHotkey,
-  setDataDir,
   setHotkey,
   suspendHotkey,
+  useDataDir,
 } from "../services/bridge";
 
 const HOME_URL = "https://github.com/zyition/slite-note";
@@ -39,8 +40,8 @@ interface SettingsPanelProps {
 export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll }: SettingsPanelProps) {
   const [recording, setRecording] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
-  const [dataDir, setDataDirDisplay] = useState(settings.dataDir || "…");
-  const [moving, setMoving] = useState(false);
+  const [dataDir, setDataDirDisplay] = useState("…");
+  const [busyAction, setBusyAction] = useState<"move" | "use" | null>(null);
   const [migrateMsg, setMigrateMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [version, setVersion] = useState("…");
   const [exporting, setExporting] = useState(false);
@@ -137,14 +138,14 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
   /* ---------- data dir ---------- */
 
   // Pick a folder in the native dialog, then move data there directly
-  // (pre-checks run inside SetDataDir; failures surface as a red message).
+  // (pre-checks run inside MoveDataDir; failures surface as a red message).
   const handleMoveData = useCallback(async () => {
     setMigrateMsg(null);
-    setMoving(true);
+    setBusyAction("move");
     try {
       const dir = await chooseDataDir();
       if (!dir) return; // user cancelled — keep the panel quiet
-      const err = await setDataDir(dir);
+      const err = await moveDataDir(dir);
       if (err) {
         setMigrateMsg({ ok: false, text: err });
         return;
@@ -155,7 +156,30 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
     } catch (err) {
       setMigrateMsg({ ok: false, text: String((err as Error)?.message ?? err) });
     } finally {
-      setMoving(false);
+      setBusyAction(null);
+    }
+  }, []);
+
+  // Point slite at an existing data folder (reinstall / new machine): no
+  // copy, no delete — preferences reload from the adopted folder.
+  const handleUseExisting = useCallback(async () => {
+    setMigrateMsg(null);
+    setBusyAction("use");
+    try {
+      const dir = await chooseDataDir();
+      if (!dir) return; // user cancelled
+      const err = await useDataDir(dir);
+      if (err) {
+        setMigrateMsg({ ok: false, text: err });
+        return;
+      }
+      const d = await currentDataDir().catch(() => "");
+      if (d) setDataDirDisplay(d);
+      setMigrateMsg({ ok: true, text: t.useExistingDone });
+    } catch (err) {
+      setMigrateMsg({ ok: false, text: String((err as Error)?.message ?? err) });
+    } finally {
+      setBusyAction(null);
     }
   }, []);
 
@@ -300,16 +324,42 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
               <FolderOpen size={11} /> {t.dataSection}
             </div>
             <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.dataDesc}</p>
-            <div className="mb-1.5 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
-              {dataDir}
+            <div className="mb-1.5 flex items-stretch gap-1.5">
+              <div className="flex-1 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
+                {dataDir}
+              </div>
+              <button
+                className={secondaryBtn}
+                onClick={() => void openDataDir()}
+                title={t.openExplorer}
+              >
+                <FolderOpen size={11} />
+              </button>
             </div>
             <div className="flex gap-1.5">
-              <button className={secondaryBtn} onClick={() => void openDataDir()}>
-                <FolderOpen size={11} /> {t.openExplorer}
-              </button>
-              <button className={secondaryBtn} onClick={() => void handleMoveData()} disabled={moving}>
-                {moving ? <Loader2 size={11} className="animate-spin" /> : <FolderSearch size={11} />}
+              <button
+                className={secondaryBtn}
+                onClick={() => void handleMoveData()}
+                disabled={busyAction !== null}
+              >
+                {busyAction === "move" ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : (
+                  <FolderSearch size={11} />
+                )}
                 {t.moveData}
+              </button>
+              <button
+                className={secondaryBtn}
+                onClick={() => void handleUseExisting()}
+                disabled={busyAction !== null}
+              >
+                {busyAction === "use" ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : (
+                  <FolderOpen size={11} />
+                )}
+                {t.useExisting}
               </button>
             </div>
             {migrateMsg && (

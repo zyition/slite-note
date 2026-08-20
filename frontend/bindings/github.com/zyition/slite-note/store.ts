@@ -68,6 +68,17 @@ export function LoadSettings(): $CancellablePromise<$models.Settings> {
 }
 
 /**
+ * MoveDataDir migrates the data (settings.json + notes) into target, points
+ * app.json at it, then removes the old files. The target must be empty — this
+ * is a move, never an overwrite. Write-then-delete ordering means a crash
+ * mid-move leaves the old directory intact and app.json untouched, so no
+ * data is lost.
+ */
+export function MoveDataDir(path: string): $CancellablePromise<void> {
+    return $Call.ByID(599783797, path);
+}
+
+/**
  * OpenDataDir reveals the active data directory in Explorer (no-op in browser
  * fallback mode).
  */
@@ -119,8 +130,9 @@ export function SaveNotes(notes: $models.Note[] | null): $CancellablePromise<voi
 
 /**
  * SaveSettings persists settings and applies window-level side effects
- * (always-on-top, window opacity, auto-start). DataDir is managed
- * exclusively by SetDataDir; window bounds exclusively by SaveWindowBounds.
+ * (always-on-top, window opacity, auto-start). The data directory is managed
+ * exclusively by MoveDataDir/UseDataDir; window bounds exclusively by
+ * SaveWindowBounds.
  */
 export function SaveSettings(settings: $models.Settings): $CancellablePromise<void> {
     return $Call.ByID(698043607, settings);
@@ -135,14 +147,6 @@ export function SaveSettings(settings: $models.Settings): $CancellablePromise<vo
  */
 export function SaveWindowBounds(x: number, y: number, w: number, h: number): $CancellablePromise<void> {
     return $Call.ByID(2293857695, x, y, w, h);
-}
-
-/**
- * SetDataDir validates the target, migrates notes.json (if any), switches the
- * active directory, persists settings, then removes the old slite files.
- */
-export function SetDataDir(path: string): $CancellablePromise<void> {
-    return $Call.ByID(2189879372, path);
 }
 
 /**
@@ -175,13 +179,19 @@ export function SuspendHotkey(): $CancellablePromise<void> {
 }
 
 /**
- * ValidateDataDir runs the pre-migration checks for a candidate data directory.
- * It returns a non-nil error describing the first failed check. Checks:
- *   - resolves to an absolute path
- *   - is not the currently active data directory
- *   - exists and is a directory
- *   - is writable (probe file create+delete)
- *   - contains only slite-owned files (notes.json, settings.json, log.txt) or nothing
+ * UseDataDir adopts an existing slite data directory (or an empty folder as a
+ * fresh one) without copying or deleting anything: app.json points at it and
+ * preferences reload from it. This is how a reinstall / new machine reconnects
+ * to previously created data.
+ */
+export function UseDataDir(path: string): $CancellablePromise<void> {
+    return $Call.ByID(2877999749, path);
+}
+
+/**
+ * ValidateDataDir runs the pre-checks for a candidate data directory in
+ * "adopt" mode (empty, or containing only slite-owned files). The settings
+ * panel calls it for a fast failure before the real operation.
  */
 export function ValidateDataDir(path: string): $CancellablePromise<void> {
     return $Call.ByID(3489296200, path);

@@ -54,8 +54,13 @@ var suspendedHotkey = ""
 var opacityOverride = false
 
 // debugLog writes diagnostics to %APPDATA%/slite/log.txt (kept small: useful
-// while the app is headless).
+// while the app is headless). Release builds stay silent — no log.txt on user
+// machines; SLITE_DEBUG=1 re-enables it for a session, and dev builds always
+// log.
 func debugLog(format string, args ...any) {
+	if appVersion != "dev" && os.Getenv("SLITE_DEBUG") == "" {
+		return
+	}
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		return

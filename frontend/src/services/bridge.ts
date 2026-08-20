@@ -206,13 +206,29 @@ export async function validateDataDir(path: string): Promise<string> {
 }
 
 /**
- * Migrate the data directory. Resolves to "" on success, else an error
- * message (pre-check failures are included).
+ * Migrate the data directory (copy data, switch, remove old). Resolves to ""
+ * on success, else an error message (pre-check failures are included).
  */
-export async function setDataDir(path: string): Promise<string> {
+export async function moveDataDir(path: string): Promise<string> {
   if (await isNative()) {
     try {
-      await Store.SetDataDir(path);
+      await Store.MoveDataDir(path);
+      return "";
+    } catch (e) {
+      return String((e as Error)?.message ?? e);
+    }
+  }
+  return t.nativeOnly;
+}
+
+/**
+ * Adopt an existing data directory (point at it, reload preferences; no copy
+ * or delete). Resolves to "" on success, else an error message.
+ */
+export async function useDataDir(path: string): Promise<string> {
+  if (await isNative()) {
+    try {
+      await Store.UseDataDir(path);
       return "";
     } catch (e) {
       return String((e as Error)?.message ?? e);

@@ -32,7 +32,6 @@ type Settings struct {
 	AlwaysOnTop     bool    `json:"alwaysOnTop"`
 	Hotkey          string  `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
 	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
-	DataDir         string  `json:"dataDir"`         // "" = default os.UserConfigDir()/slite
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
 
 	// Window bounds in physical pixels, persisted (debounced) on move/resize
@@ -42,6 +41,22 @@ type Settings struct {
 	WindowY      int `json:"windowY,omitempty"`
 	WindowWidth  int `json:"windowWidth,omitempty"`
 	WindowHeight int `json:"windowHeight,omitempty"`
+}
+
+// appConfigVersion is the schema version of app.json (the bootstrap pointer).
+const appConfigVersion = 1
+
+// AppConfig is the bootstrap pointer persisted at %APPDATA%\slite\app.json —
+// the only state that must never move with the data: it tells NewStore where
+// the data lives. Preferences (settings.json) live inside the data dir and
+// follow it on migration; this pointer does not, by design.
+//
+// DataDir "" means the default location (os.UserConfigDir()/slite). A custom
+// directory survives uninstall/reinstall because the NSIS uninstaller keeps
+// %APPDATA%\slite intact.
+type AppConfig struct {
+	Version int    `json:"version"`
+	DataDir string `json:"dataDir"` // "" = default
 }
 
 // appVersion is the user-facing version shown in the About section. It is
@@ -69,11 +84,10 @@ const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 type Store struct {
 	mu      sync.Mutex
 	dataDir string
-	// defaultDir is os.UserConfigDir()/slite — the directory NewStore boots
-	// into unless settings.json there points at a custom DataDir. Its
-	// settings.json doubles as the anchor that lets a restart rediscover a
-	// custom data directory, so SetDataDir must keep it in sync (see
-	// writeAnchorSettings).
+	// defaultDir is os.UserConfigDir()/slite — the bootstrap directory whose
+	// app.json tells NewStore where the data lives (the data dir itself when
+	// DataDir is ""). Its app.json is the single source of truth for
+	// rediscovering a custom data directory after restart or reinstall.
 	defaultDir string
 	settings   Settings
 
@@ -100,22 +114,20 @@ func NewStore() *Store {
 	}
 	defaultDir := filepath.Join(cfg, "slite")
 	s := &Store{dataDir: defaultDir, defaultDir: defaultDir}
-	s.settings = s.readSettingsFile(filepath.Join(defaultDir, "settings.json"))
 
-	// Honor a persisted custom data directory if it still exists and is a dir.
-	if d := s.settings.DataDir; d != "" {
+	// Bootstrap: app.json is the single source of truth for where the data
+	// lives (default dir when DataDir is ""). First run after an upgrade
+	// migrates the legacy anchor (settings.json's dataDir field) into it.
+	if d := s.readAppConfigDataDir(); d != "" {
 		if abs, err := filepath.Abs(d); err == nil {
 			if info, err := os.Stat(abs); err == nil && info.IsDir() {
 				s.dataDir = abs
-				if st := s.readSettingsFile(filepath.Join(abs, "settings.json")); st.Theme != "" {
-					s.settings = st
-				}
 			} else {
 				log.Printf("slite: configured data dir %q unavailable, falling back to default", d)
 			}
 		}
 	}
-	s.settings.DataDir = s.dataDir
+	s.settings = s.readSettingsFile(filepath.Join(s.dataDir, "settings.json"))
 
 	// Sync the auto-start flag so the settings page reflects reality.
 	s.settings.LaunchAtStartup = s.getLaunchAtStartup()
@@ -230,8 +242,9 @@ func (s *Store) LoadSettings() (Settings, error) {
 }
 
 // SaveSettings persists settings and applies window-level side effects
-// (always-on-top, window opacity, auto-start). DataDir is managed
-// exclusively by SetDataDir; window bounds exclusively by SaveWindowBounds.
+// (always-on-top, window opacity, auto-start). The data directory is managed
+// exclusively by MoveDataDir/UseDataDir; window bounds exclusively by
+// SaveWindowBounds.
 func (s *Store) SaveSettings(settings Settings) error {
 	if settings.Theme == "" {
 		settings.Theme = "system"
@@ -252,7 +265,6 @@ func (s *Store) SaveSettings(settings Settings) error {
 	settings.WindowWidth = prev.WindowWidth
 	settings.WindowHeight = prev.WindowHeight
 	s.settings = settings
-	s.settings.DataDir = s.dataDir // migration owns this field
 	s.mu.Unlock()
 
 	if err := s.writeJSONAtomic(s.settingsPath(), s.settings); err != nil {
@@ -303,112 +315,144 @@ func (s *Store) SetHotkey(combo string) error {
 	return s.hotkeyReconfigure(combo)
 }
 
-// ValidateDataDir runs the pre-migration checks for a candidate data directory.
-// It returns a non-nil error describing the first failed check. Checks:
-//   - resolves to an absolute path
-//   - is not the currently active data directory
-//   - exists and is a directory
-//   - is writable (probe file create+delete)
-//   - contains only slite-owned files (notes.json, settings.json, log.txt) or nothing
+// ValidateDataDir runs the pre-checks for a candidate data directory in
+// "adopt" mode (empty, or containing only slite-owned files). The settings
+// panel calls it for a fast failure before the real operation.
 func (s *Store) ValidateDataDir(path string) error {
-	return s.validateDataDir(path)
+	return s.validateDataDir(path, false)
 }
 
-// SetDataDir validates the target, migrates notes.json (if any), switches the
-// active directory, persists settings, then removes the old slite files.
-func (s *Store) SetDataDir(path string) error {
+// MoveDataDir migrates the data (settings.json + notes) into target, points
+// app.json at it, then removes the old files. The target must be empty — this
+// is a move, never an overwrite. Write-then-delete ordering means a crash
+// mid-move leaves the old directory intact and app.json untouched, so no
+// data is lost.
+func (s *Store) MoveDataDir(path string) error {
 	abs, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
 		return fmt.Errorf("invalid path: %w", err)
 	}
-	if err := s.validateDataDir(abs); err != nil {
+	if err := s.validateDataDir(abs, true); err != nil {
 		return err
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	oldDir := s.dataDir
 
-	// Copy notes if present. Write to a temp name first, then rename, to avoid
-	// half-written files if the copy is interrupted.
-	copiedNotes := false
-	if data, err := os.ReadFile(filepath.Join(oldDir, "notes.json")); err == nil {
-		tmp := filepath.Join(abs, "notes.json.tmp")
-		if err := os.WriteFile(tmp, data, 0o644); err != nil {
-			s.mu.Unlock()
-			return fmt.Errorf("copy notes to new dir: %w", err)
-		}
-		if err := os.Rename(tmp, filepath.Join(abs, "notes.json")); err != nil {
-			os.Remove(tmp)
-			s.mu.Unlock()
-			return fmt.Errorf("copy notes to new dir: %w", err)
-		}
-		copiedNotes = true
-	}
-
-	s.dataDir = abs
-	s.settings.DataDir = abs
-	if err := s.writeJSONAtomic(s.settingsPath(), s.settings); err != nil {
-		// Roll back the directory switch and remove the copied notes.
-		s.dataDir = oldDir
-		s.settings.DataDir = oldDir
-		if copiedNotes {
-			os.Remove(filepath.Join(abs, "notes.json"))
-		}
-		s.mu.Unlock()
-		return fmt.Errorf("write settings in new dir: %w", err)
-	}
-	// Keep the default dir's settings.json in sync as the DataDir anchor so a
-	// restart (NewStore reads only the default dir first) can rediscover this
-	// custom directory. A failure here rolls the migration back — the old dir
-	// must stay untouched rather than half-migrated.
-	if err := s.writeAnchorSettings(); err != nil {
-		s.dataDir = oldDir
-		s.settings.DataDir = oldDir
-		if copiedNotes {
-			os.Remove(filepath.Join(abs, "notes.json"))
-		}
-		s.mu.Unlock()
-		return fmt.Errorf("write anchor settings: %w", err)
-	}
-	s.mu.Unlock()
-
-	// Move semantics: remove the old slite files (best effort). The default
-	// dir's settings.json is exempt — it is the DataDir anchor above.
-	os.Remove(filepath.Join(oldDir, "notes.json"))
-	if !strings.EqualFold(filepath.Clean(oldDir), filepath.Clean(s.defaultDir)) {
-		os.Remove(filepath.Join(oldDir, "settings.json"))
-	}
-	return nil
-}
-
-// writeAnchorSettings persists the current settings (whose DataDir points at
-// the active directory) into the default directory's settings.json. NewStore
-// reads that file first at startup to rediscover a custom data directory, so
-// this anchor is what makes a custom DataDir survive restarts and repeated
-// migrations (default → A → B must end with an anchor pointing at B). No-op
-// when the active directory already is the default one — it is written by
-// writeJSONAtomic via settingsPath. Must be called with s.mu held.
-func (s *Store) writeAnchorSettings() error {
-	if strings.EqualFold(filepath.Clean(s.dataDir), filepath.Clean(s.defaultDir)) {
-		return nil
-	}
-	if err := os.MkdirAll(s.defaultDir, 0o755); err != nil {
-		return fmt.Errorf("create default data dir: %w", err)
-	}
-	data, err := json.MarshalIndent(s.settings, "", "  ")
+	copied, err := s.copyDataDirContents(oldDir, abs)
 	if err != nil {
-		return fmt.Errorf("marshal anchor settings: %w", err)
+		s.removeCopied(abs, copied)
+		return err
 	}
-	path := filepath.Join(s.defaultDir, "settings.json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write anchor temp: %w", err)
+
+	// Point the bootstrap at the new location, then drop the old files.
+	// Migrating back into the default dir stores the canonical "" form.
+	s.dataDir = abs
+	pointer := abs
+	if strings.EqualFold(filepath.Clean(abs), filepath.Clean(s.defaultDir)) {
+		pointer = ""
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename anchor: %w", err)
+	if err := s.writeAppConfig(AppConfig{Version: appConfigVersion, DataDir: pointer}); err != nil {
+		s.dataDir = oldDir
+		s.removeCopied(abs, copied)
+		return err
+	}
+	for _, name := range copied {
+		_ = os.RemoveAll(filepath.Join(oldDir, name))
 	}
 	return nil
 }
+
+// UseDataDir adopts an existing slite data directory (or an empty folder as a
+// fresh one) without copying or deleting anything: app.json points at it and
+// preferences reload from it. This is how a reinstall / new machine reconnects
+// to previously created data.
+func (s *Store) UseDataDir(path string) error {
+	abs, err := filepath.Abs(strings.TrimSpace(path))
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if err := s.validateDataDir(abs, false); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	oldDir, oldSettings := s.dataDir, s.settings
+	s.dataDir = abs
+	s.settings = s.readSettingsFile(filepath.Join(abs, "settings.json"))
+	pointer := abs
+	if strings.EqualFold(filepath.Clean(abs), filepath.Clean(s.defaultDir)) {
+		pointer = ""
+	}
+	if err := s.writeAppConfig(AppConfig{Version: appConfigVersion, DataDir: pointer}); err != nil {
+		s.dataDir, s.settings = oldDir, oldSettings
+		return err
+	}
+	return nil
+}
+
+// copyDataDirContents copies the data artifacts that follow a move
+// (settings.json + whichever note layout exists) into dst. notes.json is the
+// legacy single-file layout; notes/ the per-note layout that LoadNotes
+// migrates to. Whichever exists is carried over, so one function covers both
+// layouts. Returns the artifact names actually copied (for rollback/cleanup).
+func (s *Store) copyDataDirContents(src, dst string) ([]string, error) {
+	var copied []string
+	for _, name := range []string{"settings.json", "notes.json", "notes"} {
+		srcPath := filepath.Join(src, name)
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			continue // not present — nothing to carry over
+		}
+		if info.IsDir() {
+			entries, err := os.ReadDir(srcPath)
+			if err != nil {
+				return copied, fmt.Errorf("read %s: %w", name, err)
+			}
+			if err := os.MkdirAll(filepath.Join(dst, name), 0o755); err != nil {
+				return copied, fmt.Errorf("create %s: %w", name, err)
+			}
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				data, err := os.ReadFile(filepath.Join(srcPath, e.Name()))
+				if err != nil {
+					return copied, fmt.Errorf("read %s: %w", filepath.Join(name, e.Name()), err)
+				}
+				if err := os.WriteFile(filepath.Join(dst, name, e.Name()), data, 0o644); err != nil {
+					return copied, fmt.Errorf("copy %s: %w", filepath.Join(name, e.Name()), err)
+				}
+			}
+			copied = append(copied, name)
+			continue
+		}
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+			return copied, fmt.Errorf("copy %s: %w", name, err)
+		}
+		copied = append(copied, name)
+	}
+	return copied, nil
+}
+
+// removeCopied deletes artifacts that were written into dir during a
+// migration, for rollback or post-move cleanup.
+func (s *Store) removeCopied(dir string, names []string) {
+	for _, n := range names {
+		_ = os.RemoveAll(filepath.Join(dir, n))
+	}
+}
+
+// writeAnchorSettings is gone: the bootstrap pointer now lives in app.json
+// (see writeAppConfig). No legacy anchor is written or read anymore beyond
+// the one-time migration in readAppConfigDataDir.
+
 
 // SuspendHotkey temporarily unregisters the global toggle hotkey while the
 // user records a new combo in the settings panel, so pressing the old combo
@@ -556,7 +600,16 @@ func (s *Store) CurrentDataDir() string {
 
 // --- internal ---
 
-func (s *Store) validateDataDir(path string) error {
+// validateDataDir checks a candidate data directory. forMove=true requires an
+// empty target (move never overwrites); forMove=false (adopt) allows an empty
+// folder or one holding only slite-owned files — including the legacy
+// notes.json layout, which LoadNotes migrates on next read. Checks:
+//   - resolves to an absolute path
+//   - is not the currently active data directory
+//   - exists and is a directory
+//   - is writable (probe file create+delete)
+//   - content per the mode above
+func (s *Store) validateDataDir(path string, forMove bool) error {
 	abs, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
 		return fmt.Errorf("invalid path: %w", err)
@@ -580,18 +633,94 @@ func (s *Store) validateDataDir(path string) error {
 		return fmt.Errorf("directory is not writable: %w", err)
 	}
 	_ = os.Remove(probe)
-	// Only slite-owned files may be present.
+	// Content check per mode.
 	entries, err := os.ReadDir(abs)
 	if err != nil {
 		return fmt.Errorf("cannot read directory: %w", err)
 	}
 	for _, e := range entries {
-		switch strings.ToLower(e.Name()) {
-		case "notes.json", "notes.json.tmp", "settings.json", "log.txt", ".slite-write-test":
+		name := strings.ToLower(e.Name())
+		// Bootstrap residue (.slite-write-test probe, app.json pointer) is
+		// tolerated in both modes; it is not data.
+		if name == ".slite-write-test" || name == "app.json" {
+			continue
+		}
+		if forMove {
+			return fmt.Errorf("target directory is not empty")
+		}
+		switch name {
+		case "settings.json", "notes.json", "notes.json.tmp", "log.txt":
+			continue
+		case "notes":
+			if !e.IsDir() {
+				return fmt.Errorf("unexpected file %q in directory", e.Name())
+			}
 			continue
 		default:
-			return fmt.Errorf("directory is not empty (found %q)", e.Name())
+			return fmt.Errorf("directory contains files that don't belong to slite (%q)", e.Name())
 		}
+	}
+	return nil
+}
+
+// appConfigPath is the bootstrap pointer's fixed location. It stays in the
+// default dir even when the data lives elsewhere, and survives uninstall
+// because the NSIS uninstaller keeps %APPDATA%\slite.
+func (s *Store) appConfigPath() string { return filepath.Join(s.defaultDir, "app.json") }
+
+// readAppConfigDataDir returns the configured data directory from app.json
+// ("" = default). On the first run after an upgrade from the legacy layout it
+// migrates the old anchor — settings.json's dataDir field, which used to
+// double as the bootstrap pointer — into app.json so the boot path is
+// uniform from then on. Failures to write the migrated/default config are
+// non-fatal: a missing app.json falls back to the default directory.
+func (s *Store) readAppConfigDataDir() string {
+	if data, err := os.ReadFile(s.appConfigPath()); err == nil {
+		var cfg AppConfig
+		if json.Unmarshal(data, &cfg) == nil {
+			return cfg.DataDir
+		}
+	}
+	// Legacy migration: the pre-app.json settings.json carried dataDir.
+	legacy := struct {
+		DataDir string `json:"dataDir"`
+	}{}
+	if data, err := os.ReadFile(filepath.Join(s.defaultDir, "settings.json")); err == nil {
+		if json.Unmarshal(data, &legacy) == nil && legacy.DataDir != "" {
+			pointer := legacy.DataDir
+			// A legacy pointer at the default dir itself is stored in the
+			// canonical "" form, matching MoveDataDir/UseDataDir.
+			if abs, err := filepath.Abs(legacy.DataDir); err == nil && strings.EqualFold(filepath.Clean(abs), filepath.Clean(s.defaultDir)) {
+				pointer = ""
+			}
+			_ = s.writeAppConfig(AppConfig{Version: appConfigVersion, DataDir: pointer})
+			return pointer
+		}
+	}
+	// Default layout (or no legacy anchor): record it explicitly so every boot
+	// reads the same single source. Never fatal — a read-only AppData degrades
+	// to an implicit default.
+	_ = s.writeAppConfig(AppConfig{Version: appConfigVersion})
+	return ""
+}
+
+// writeAppConfig persists the bootstrap pointer atomically. Called with s.mu
+// held by migration paths; NewStore calls it before the store is shared.
+func (s *Store) writeAppConfig(cfg AppConfig) error {
+	if err := os.MkdirAll(s.defaultDir, 0o755); err != nil {
+		return fmt.Errorf("create default data dir: %w", err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal app config: %w", err)
+	}
+	path := s.appConfigPath()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write app config temp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename app config: %w", err)
 	}
 	return nil
 }

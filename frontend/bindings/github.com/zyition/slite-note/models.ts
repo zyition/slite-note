@@ -46,11 +46,6 @@ export interface Settings {
     "launchAtStartup": boolean;
 
     /**
-     * "" = default os.UserConfigDir()/slite
-     */
-    "dataDir": string;
-
-    /**
      * window opacity 0.3–1.0, 1 = opaque
      */
     "opacity": number;

@@ -38,7 +38,6 @@ describe("makeSettings", () => {
       alwaysOnTop: false,
       hotkey: "Alt+Shift+S",
       launchAtStartup: false,
-      dataDir: "",
       opacity: 1,
       windowX: 0,
       windowY: 0,
