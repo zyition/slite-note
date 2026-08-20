@@ -1,3 +1,17 @@
+## [0.6.0] - 2026-08-20
+
+### Features
+
+- MacOS port — platform layer, Mod shortcuts, background alpha
+
+### Testing
+
+- Make shortcut/hotkey tests host-independent
+
+### Documentation
+
+- MacOS port ADRs, install notes, backlog design
+- Drop shipped macOS port from backlog
 ## [0.5.0] - 2026-08-20
 
 ### Features
