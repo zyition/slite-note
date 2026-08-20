@@ -277,9 +277,20 @@ export async function setAlwaysOnTop(on: boolean): Promise<void> {
   }
 }
 
-export async function setWindowBackground(r: number, g: number, b: number): Promise<void> {
+/**
+ * Set the native window background colour. macOS honours the alpha channel
+ * (the note background is translucent via CSS, so the shell colour just needs
+ * to match); Windows ignores alpha (whole-window opacity is applied natively
+ * via WS_EX_LAYERED). Default alpha 255 = opaque.
+ */
+export async function setWindowBackground(
+  r: number,
+  g: number,
+  b: number,
+  alpha = 255,
+): Promise<void> {
   if (await isNative()) {
-    await WailsWindow.SetBackgroundColour(r, g, b, 255);
+    await WailsWindow.SetBackgroundColour(r, g, b, alpha);
   }
 }
 

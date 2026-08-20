@@ -7,6 +7,7 @@ import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
 import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
 import { deriveTitle } from "./services/title";
+import { isMac } from "./services/platform";
 import { THEMES, resolveTheme, onSystemThemeChange } from "./services/theme";
 import { t } from "./services/i18n";
 import {
@@ -103,8 +104,22 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = appliedTheme;
-    void setWindowBackground(...THEMES[appliedTheme].rgb);
-  }, [appliedTheme]);
+    // macOS: the window shell is transparent (Backdrop=Transparent) and the
+    // note background carries the alpha — pass it through so the window
+    // background matches the CSS. Windows ignores the alpha channel of
+    // SetBackgroundColour (its whole-window alpha is applied natively).
+    const bgAlpha = isMac() ? Math.round(settings.opacity * 255) : 255;
+    void setWindowBackground(...THEMES[appliedTheme].rgb, bgAlpha);
+  }, [appliedTheme, settings.opacity]);
+
+  // macOS note-background translucency: the CSS background (body + title bar)
+  // is mixed with transparency via --bg-opacity. Overlays (settings, theme
+  // picker, shortcuts) force 100% — matching the Windows opacity override.
+  useEffect(() => {
+    const opaque = settingsOpen || themePickerOpen || shortcutsOpen || !isMac();
+    const pct = opaque ? 100 : Math.round(settings.opacity * 100);
+    document.documentElement.style.setProperty("--bg-opacity", `${pct}%`);
+  }, [settings.opacity, settingsOpen, themePickerOpen, shortcutsOpen]);
 
   // App-modal overlays (settings, theme picker) keep the window fully opaque
   // while open — translucency is only useful while editing content behind.
@@ -324,12 +339,30 @@ export default function App() {
     }
   }, [reportSaveError, titleFor]);
 
-  /* ---------------- quick switching (Ctrl+Tab / Ctrl+Shift+Tab) ------------- */
+  /* ---------------- quick switching (Ctrl+Tab / Cmd+Shift+[ ]) ------------- */
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Deliberately ignore Alt/Meta so Alt+Tab (OS) and Ctrl+Meta+Tab never
-      // collide; Shift only flips the direction.
+      if (isMac()) {
+        // macOS: Cmd+Shift+] = next, Cmd+Shift+[ = prev (browser tab idiom).
+        // Ctrl+Tab is the system keyboard-navigation combo and Cmd+Tab the
+        // app switcher, so both are deliberately excluded.
+        if (!e.metaKey || e.ctrlKey || e.altKey || !e.shiftKey) return;
+        if (e.code !== "BracketRight" && e.code !== "BracketLeft") return;
+        const list = notesRef.current;
+        if (list.length < 2) return;
+        let idx = list.findIndex((n) => n.id === activeId);
+        if (idx < 0) idx = 0;
+        const dir = e.code === "BracketRight" ? 1 : -1;
+        const next = list[(idx + dir + list.length) % list.length];
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveId(next.id);
+        return;
+      }
+      // Windows/Linux: Ctrl+Tab / Ctrl+Shift+Tab. Deliberately ignore
+      // Alt/Meta so Alt+Tab (OS) and Ctrl+Meta+Tab never collide; Shift only
+      // flips the direction.
       if (!e.ctrlKey || e.altKey || e.metaKey) return;
       if (e.key !== "Tab") return;
       const list = notesRef.current;
@@ -348,25 +381,28 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [activeId]);
 
-  // App-level shortcuts: Ctrl+N new note, Ctrl+, opens settings, Ctrl+Shift+T
-  // cycles the theme, Ctrl+Shift+/ toggles the shortcut cheatsheet. Capture
-  // phase so they work even while the editor has focus.
+  // App-level shortcuts (Mod-mapped: Cmd on macOS, Ctrl elsewhere): new
+  // note, open settings, cycle theme, toggle the shortcut cheatsheet.
+  // Capture phase so they work even while the editor has focus.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey || e.metaKey) return;
-      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+      const mod = isMac() ? e.metaKey : e.ctrlKey;
+      // The other platform's modifier must stay out: Cmd on mac, Ctrl on win.
+      const foreign = isMac() ? e.ctrlKey : e.metaKey;
+      if (!mod || foreign || e.altKey) return;
+      if (!e.shiftKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         e.stopPropagation();
         createNote();
         return;
       }
-      if (e.ctrlKey && !e.shiftKey && e.key === ",") {
+      if (!e.shiftKey && e.key === ",") {
         e.preventDefault();
         e.stopPropagation();
         setSettingsOpen(true);
         return;
       }
-      if (!e.ctrlKey || !e.shiftKey) return;
+      if (!e.shiftKey) return;
       const k = e.key.toLowerCase();
       if (k === "t") {
         e.preventDefault();
@@ -374,7 +410,7 @@ export default function App() {
         cycleTheme();
         return;
       }
-      // Ctrl+Shift+/ (reports as "?" on US layouts, "/" elsewhere).
+      // Mod+Shift+/ (reports as "?" on US layouts, "/" elsewhere).
       if (e.key === "?" || e.key === "/") {
         e.preventDefault();
         e.stopPropagation();

@@ -60,7 +60,7 @@ export function TitleBar(props: TitleBarProps) {
     "no-drag flex h-6 w-6 items-center justify-center rounded text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]";
 
   return (
-    <header className="titlebar flex h-10 shrink-0 items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-titlebar)] px-2">
+    <header className="titlebar flex h-10 shrink-0 items-center gap-0.5 border-b border-[var(--border)] px-2">
       <NotePicker
         notes={notes}
         activeId={activeId}

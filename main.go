@@ -7,12 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"unsafe"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/zyition/slite-note/internal/windowutil"
-	"golang.org/x/sys/windows"
 )
 
 // Wails embeds the built frontend into the binary (frontend/dist is produced by
@@ -93,10 +91,13 @@ func webviewDataPath() string {
 func main() {
 	// --silent (auto-start): the window stays hidden after startup; the user
 	// summons it via the global hotkey or the tray.
+	// --smoke (CI): boot, create+show the window, verify, then exit.
 	for _, a := range os.Args {
-		if a == "--silent" {
+		switch a {
+		case "--silent":
 			silentStart = true
-			break
+		case "--smoke":
+			smokeMode = true
 		}
 	}
 
@@ -159,6 +160,12 @@ func main() {
 		URL:              "/",
 		// Start hidden; shown after the startup positioning below to avoid a flash.
 		Hidden: true,
+		// macOS: make the window shell transparent so the frontend's semi-
+		// transparent note background (--bg-opacity) shows the desktop through.
+		// Ignored on Windows (which uses WS_EX_LAYERED for opacity instead).
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTransparent,
+		},
 	})
 
 	// Closing the window (Alt+F4 / WM_CLOSE) hides it instead of quitting: the
@@ -210,6 +217,12 @@ func main() {
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		setupTray()
+		setupPlatformUI()
+		registerPlatformHooks()
+		if smokeMode {
+			go smokeCheck()
+			return
+		}
 		// Wait for the WebView2 to finish loading, then position and show the
 		// window in one step: the first visible frame is already at the left
 		// edge, so no post-hoc repositioning (no visible jump). On a silent
@@ -345,18 +358,8 @@ func resumeToggleHotkey() error {
 	return nil
 }
 
-// userDownloadsDir returns the user's Downloads folder via the known-folder
-// API (honours a redirected Downloads location), falling back to
-// <home>/Downloads, then "" (no default directory) if neither resolves.
-func userDownloadsDir() string {
-	if d, err := windows.KnownFolderPath(windows.FOLDERID_Downloads, 0); err == nil && d != "" {
-		return d
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, "Downloads")
-	}
-	return ""
-}
+// userDownloadsDir is provided by the platform layer (Win32 known-folder on
+// Windows, ~/Downloads on macOS).
 
 // positionWindowAtStartup restores the window to its last saved bounds
 // (Settings.Window*) when those still sit on a visible screen, otherwise
@@ -402,18 +405,8 @@ func boundsVisible(x, y, w, h int) bool {
 	return windowutil.RectOverlapsAny(x, y, w, h, screens)
 }
 
-// setWindowBounds moves/resizes the native window via SetWindowPos.
-func setWindowBounds(x, y, w, h int) {
-	if mainWindow == nil {
-		return
-	}
-	hwnd := uintptr(mainWindow.NativeWindow())
-	if hwnd == 0 {
-		return
-	}
-	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), uintptr(w), uintptr(h),
-		uintptr(swpNoZorder|swpNoActivate))
-}
+// setWindowBounds moves/resizes the native window. Implemented per platform
+// (Win32 SetWindowPos on Windows; logical-point conversion on macOS).
 
 // positionedOnce guards the startup placement so later Show() calls (tray /
 // hotkey) do not yank the window back to the left edge.
@@ -422,6 +415,12 @@ var positionedOnce = false
 // silentStart is true when launched with --silent (auto-start): the window
 // is positioned but never shown; the user summons it via hotkey or tray.
 var silentStart = false
+
+// smokeMode is true when launched with --smoke (CI launch smoke test): the
+// app boots, creates the window, positions and shows it, reports SMOKE OK and
+// exits 0 (or exits 1 on any failure). This is the only place the native
+// startup path is verified without a real desktop session.
+var smokeMode = false
 
 // showMainWindow makes the window visible and focused. It emits app:show so
 // the frontend can move the caret to the end of the note, ready to type — a
@@ -448,95 +447,11 @@ func showMainWindowAtStartup() {
 	}
 }
 
-// --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
-//
-// Wails v3 has no opacity API, so we drive the window through user32 directly.
-// alpha must be in (0, 1]; values below 0.05 remove the layered style (fully
-// opaque). The whole window — WebView2 content included — is affected.
-
-var (
-	user32              = windows.NewLazySystemDLL("user32.dll")
-	procSetLayeredAttrs = user32.NewProc("SetLayeredWindowAttributes")
-	procGetWindowLong   = user32.NewProc("GetWindowLongPtrW")
-	procSetWindowLong   = user32.NewProc("SetWindowLongPtrW")
-	procSetWindowPos    = user32.NewProc("SetWindowPos")
-	procGetWindowRect   = user32.NewProc("GetWindowRect")
-)
-
-const (
-	gwlExStyle    = int(-20)
-	wsExLayered   = 0x00080000
-	lwaAlpha      = 0x00000002
-	opacityMin    = 0.05
-	swpNoZorder   = 0x0004
-	swpNoActivate = 0x0010
-)
-
-// gwlExStylePtr is the runtime-converted nIndex (GWLP_EXSTYLE = -20) for
-// GetWindowLongPtrW/SetWindowLongPtrW (uintptr rejects negative constants).
-var (
-	gwlExStyleVar int = -20
-	gwlExStylePtr     = uintptr(gwlExStyleVar)
-)
-
-// setWindowOpacity applies a whole-window alpha (1 = fully opaque). A value of
-// 0 or >= 1 removes the layered style entirely to avoid any DWM side effects.
-func setWindowOpacity(alpha float64) error {
-	if mainWindow == nil {
-		return nil
-	}
-	hwnd := uintptr(mainWindow.NativeWindow())
-	if hwnd == 0 {
-		return nil
-	}
-	exStyle, _, _ := procGetWindowLong.Call(hwnd, gwlExStylePtr)
-	if alpha <= 0 || alpha >= 1 {
-		if exStyle&wsExLayered != 0 {
-			procSetWindowLong.Call(hwnd, gwlExStylePtr, exStyle&^wsExLayered)
-		}
-		return nil
-	}
-	if alpha < opacityMin {
-		alpha = opacityMin
-	}
-	procSetWindowLong.Call(hwnd, gwlExStylePtr, exStyle|wsExLayered)
-	_, _, err := procSetLayeredAttrs.Call(hwnd, 0, uintptr(byte(alpha*255+0.5)), lwaAlpha)
-	if err != nil && err != windows.ERROR_SUCCESS {
-		return err
-	}
-	return nil
-}
-
-// setOpacityOverride lifts the window to fully opaque while a modal overlay
-// is open and suppresses the persisted opacity until released. Releasing
-// restores whatever the user last set.
-func setOpacityOverride(on bool) {
-	opacityOverride = on
-	if on {
-		if err := setWindowOpacity(1); err != nil {
-			debugLog("set opacity (override) failed: %v", err)
-		}
-	} else {
-		applyWindowOpacity()
-	}
-}
-
-// applyWindowOpacity applies the persisted opacity (defaulting to opaque when
-// unset). Called at startup and from window-change hooks.
-func applyWindowOpacity() {
-	if opacityOverride {
-		_ = setWindowOpacity(1)
-		return
-	}
-	if err := setWindowOpacity(windowutil.ClampOpacity(store.currentSettings().Opacity)); err != nil {
-		debugLog("set opacity failed: %v", err)
-	}
-}
-
 // applyOpacityOnWindowChanges re-applies the window opacity after framework
-// resizes/moves, because Wails' setBounds re-applies LWA_ALPHA=255 for
-// layered windows (which would undo a user-set transparency), and debounce-
-// saves the window bounds so the position/size survive a restart.
+// resizes/moves (on Windows, Wails' setBounds re-applies LWA_ALPHA=255 for
+// layered windows, undoing a user-set transparency; on macOS the native
+// opacity call is a no-op) and debounce-saves the window bounds so the
+// position/size survive a restart.
 func applyOpacityOnWindowChanges() {
 	onChange := func(*application.WindowEvent) {
 		applyWindowOpacity()
@@ -546,7 +461,7 @@ func applyOpacityOnWindowChanges() {
 	mainWindow.OnWindowEvent(events.Common.WindowDidMove, onChange)
 }
 
-// --- window bounds persistence (Win32 GetWindowRect + debounced save) ---
+// --- window bounds persistence (debounced save) ---
 
 // boundsSaveDelay coalesces the move/resize event storm during a drag into a
 // single settings write.
@@ -576,37 +491,9 @@ func flushBoundsSave() {
 	saveWindowBoundsNow()
 }
 
-// saveWindowBoundsNow reads the window rect (physical pixels, matching the
-// SetWindowPos-based placement) and persists it. Best effort: a failed write
-// only costs the last drag position.
-func saveWindowBoundsNow() {
-	boundsSaveTimer = nil
-	if mainWindow == nil {
-		return
-	}
-	hwnd := uintptr(mainWindow.NativeWindow())
-	if hwnd == 0 {
-		return
-	}
-	var r winRect
-	if _, _, err := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r))); err != nil && err != windows.ERROR_SUCCESS {
-		debugLog("GetWindowRect failed: %v", err)
-		return
-	}
-	w := int(r.Right - r.Left)
-	h := int(r.Bottom - r.Top)
-	if w <= 0 || h <= 0 {
-		return
-	}
-	if err := store.SaveWindowBounds(int(r.Left), int(r.Top), w, h); err != nil {
-		debugLog("save window bounds failed: %v", err)
-	}
-}
-
-// winRect mirrors the Win32 RECT layout (LONG left/top/right/bottom).
-type winRect struct {
-	Left, Top, Right, Bottom int32
-}
+// saveWindowBoundsNow reads the window bounds (physical pixels) and persists
+// them. Implemented per platform (Win32 GetWindowRect / macOS Position+Size
+// × scale factor). Best effort: a failed write only costs the last drag.
 
 // setupTray creates the system tray icon with a menu (Show/Hide, Quit). Left
 // click toggles window visibility; the menu mirrors the same actions.
@@ -641,6 +528,33 @@ func setupTray() {
 	// tray when the app is running (runOrDeferToAppRun), and a second Run()
 	// re-adds the icon (ShellNotifyIcon NIM_ADD) producing a duplicate tray
 	// icon.
+}
+
+// smokeCheck runs the CI launch smoke test: give the window a moment to
+// finish creating, then verify it exists and is visible (unless --silent was
+// also passed), print SMOKE OK and exit 0. Any failure exits 1 so the CI job
+// fails. Uses the same startup path as a normal launch.
+func smokeCheck() {
+	time.Sleep(1500 * time.Millisecond)
+	if mainWindow == nil {
+		log.Println("SMOKE FAIL: main window was never created")
+		os.Exit(1)
+	}
+	positionWindowAtStartup()
+	applyWindowOpacity()
+	if !silentStart {
+		showMainWindow()
+		// Show may be async on some platforms; give it a beat before checking.
+		time.Sleep(200 * time.Millisecond)
+		if !mainWindow.IsVisible() {
+			log.Println("SMOKE FAIL: window not visible after show")
+			os.Exit(1)
+		}
+	}
+	debugLog("smoke ok")
+	fmt.Println("SMOKE OK")
+	app.Quit()
+	os.Exit(0)
 }
 
 // toggleWindow shows or hides the main window (hotkey, tray click, tray menu).

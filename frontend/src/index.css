@@ -57,7 +57,10 @@ body,
 }
 
 body {
-  background: var(--bg);
+  /* --bg-opacity (set by App.tsx) drives the note-background translucency on
+     macOS; it defaults to 100% (fully opaque) elsewhere, so color-mix is a
+     no-op on Windows. */
+  background: color-mix(in srgb, var(--bg) var(--bg-opacity, 100%), transparent);
   color: var(--fg);
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -67,6 +70,8 @@ body {
 /* Drag region: the whole title bar drags the frameless window (Wails v3). */
 .titlebar {
   --wails-draggable: drag;
+  /* Same translucency as the body so the note reads as one see-through sheet. */
+  background: color-mix(in srgb, var(--bg-titlebar) var(--bg-opacity, 100%), transparent);
 }
 .titlebar button,
 .titlebar .no-drag {

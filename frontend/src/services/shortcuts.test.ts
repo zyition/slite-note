@@ -1,22 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { APP_SHORTCUTS, kbdParts, SHORTCUT_GROUPS } from "./shortcuts";
+import { describe, expect, it, vi } from "vitest";
 
-describe("kbdParts", () => {
-  it("splits an accelerator into key parts", () => {
-    expect(kbdParts("Ctrl+Shift+Tab")).toEqual(["Ctrl", "Shift", "Tab"]);
-    expect(kbdParts("Alt+Shift+S")).toEqual(["Alt", "Shift", "S"]);
-  });
+// Default module load: non-mac (jsdom reports an empty platform), which
+// exercises the Windows/Linux Ctrl-mapped path.
+import { appShortcuts, SHORTCUT_GROUPS } from "./shortcuts";
 
-  it("handles empty / malformed combos without crashing", () => {
-    expect(kbdParts("")).toEqual([]);
-    expect(kbdParts("++")).toEqual([]);
-  });
-});
-
-describe("APP_SHORTCUTS registry", () => {
+describe("appShortcuts (Windows/Linux path)", () => {
   it("every shortcut has an id, at least one combo, a label and a valid group", () => {
     const groups = new Set(SHORTCUT_GROUPS.map((g) => g.id));
-    for (const s of APP_SHORTCUTS) {
+    for (const s of appShortcuts()) {
       expect(s.id).toBeTruthy();
       expect(s.keys.length).toBeGreaterThan(0);
       for (const k of s.keys) {
@@ -32,15 +23,50 @@ describe("APP_SHORTCUTS registry", () => {
   });
 
   it("app-level shortcuts use Ctrl (not Alt/Meta) so they never collide with OS combos", () => {
-    for (const s of APP_SHORTCUTS.filter((x) => x.group === "app")) {
+    for (const s of appShortcuts().filter((x) => x.group === "app")) {
       for (const k of s.keys) {
         expect(k.startsWith("Ctrl+")).toBe(true);
       }
     }
   });
 
+  it("maps note switching to Ctrl+Tab / Ctrl+Shift+Tab on Windows", () => {
+    const rows = appShortcuts();
+    expect(rows.find((r) => r.id === "next-note")?.keys).toEqual(["Ctrl+Tab"]);
+    expect(rows.find((r) => r.id === "prev-note")?.keys).toEqual([
+      "Ctrl+Shift+Tab",
+    ]);
+  });
+
   it("shortcut ids are unique", () => {
-    const ids = APP_SHORTCUTS.map((s) => s.id);
+    const ids = appShortcuts().map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("appShortcuts (macOS path)", () => {
+  it("Mod-maps app shortcuts to Cmd and overrides note switching", async () => {
+    vi.resetModules();
+    vi.doMock("./platform", () => ({ isMac: () => true }));
+    const mac = await import("./shortcuts");
+    const rows = mac.appShortcuts();
+
+    expect(rows.find((r) => r.id === "new-note")?.keys).toEqual(["Cmd+N"]);
+    expect(rows.find((r) => r.id === "open-settings")?.keys).toEqual(["Cmd+,"]);
+    // Ctrl+Tab is the system keyboard-navigation combo on macOS, Cmd+Tab the
+    // app switcher: note switching moves to the browser tab idiom.
+    expect(rows.find((r) => r.id === "next-note")?.keys).toEqual([
+      "Cmd+Shift+]",
+    ]);
+    expect(rows.find((r) => r.id === "prev-note")?.keys).toEqual([
+      "Cmd+Shift+[",
+    ]);
+    expect(rows.find((r) => r.id === "check-item")?.keys).toEqual([
+      "Cmd+Enter",
+    ]);
+    // Redo follows the mac convention.
+    expect(rows.find((r) => r.id === "redo")?.keys).toEqual(["Cmd+Shift+Z"]);
+
+    vi.doUnmock("./platform");
   });
 });

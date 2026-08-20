@@ -33,7 +33,7 @@ const en = {
   pressNewHotkey: "Press the new shortcut…",
   hotkeyChangeFailed: "Could not set that shortcut",
   autoStartSection: "Launch at startup",
-  autoStartDesc: "Start slite automatically when you sign in to Windows.",
+  autoStartDesc: "Start slite automatically when you sign in to your computer.",
   dataSection: "Data location",
   dataDesc:
     "Notes and settings are stored in this folder. Move them to a new location, or point slite at an existing one.",
@@ -46,7 +46,9 @@ const en = {
   nativeOnly: "Only available in the desktop app.",
   cancel: "Cancel",
   opacitySection: "Window opacity",
-  opacityDesc: "Make the window see-through. 100% is fully opaque.",
+  // macOS fades the note background (text stays crisp); Windows fades the
+  // whole window. The single line covers both readings.
+  opacityDesc: "Make the note see-through. 100% is fully opaque.",
 
   // Markdown export (settings)
   exportAllSection: "Markdown export",
@@ -80,7 +82,7 @@ const en = {
   homepageLabel: "Homepage",
   licenseLabel: "License",
   aboutDesc:
-    "slite-note. A minimal sticky note for Windows. Built with Wails, BlockNote, React, Tailwind and lucide.",
+    "slite-note. A minimal sticky note for your desktop. Built with Wails, BlockNote, React, Tailwind and lucide.",
 };
 
 export const t: typeof en = en;

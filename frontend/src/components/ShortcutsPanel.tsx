@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { Keyboard, X } from "lucide-react";
 import { t } from "../services/i18n";
+import { displayParts } from "../services/hotkey";
 import {
-  APP_SHORTCUTS,
+  appShortcuts,
   SHORTCUT_GROUPS,
-  kbdParts,
   type ShortcutDef,
   type ShortcutGroup,
 } from "../services/shortcuts";
@@ -39,7 +39,7 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
 
   /** Global row is dynamic (the user-configurable toggle hotkey). */
   const rowsFor = (group: ShortcutGroup): ShortcutDef[] => {
-    const rows = APP_SHORTCUTS.filter((s) => s.group === group);
+    const rows = appShortcuts().filter((s) => s.group === group);
     if (group === "global") {
       rows.unshift({
         id: "toggle-window",
@@ -98,7 +98,7 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
                         {row.keys.map((combo, i) => (
                           <span key={`${combo}-${i}`} className="flex items-center gap-0.5">
                             {i > 0 && <span className="text-[var(--fg-muted)]">·</span>}
-                            {kbdParts(combo).map((part) => (
+                            {displayParts(combo).map((part) => (
                               <kbd key={part} className="slite-kbd">
                                 {part}
                               </kbd>

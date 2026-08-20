@@ -1,11 +1,18 @@
 /**
  * hotkey.ts — mapping a keyboard event to a Wails accelerator string
- * ("Alt+Shift+S", "Ctrl+K", …) and formatting one for display.
+ * ("Alt+Shift+S", "Cmd+K", …) and formatting one for display.
+ *
+ * Modifier naming follows Wails' parseAccelerator per platform: on macOS the
+ * Command key is "Cmd" (NOT "Super" — that is the Windows/Logo key), on
+ * Windows/Linux Control is "Ctrl". The app's own shortcuts use the same Mod
+ * abstraction (see shortcuts.ts).
  *
  * The allowed key set mirrors what Wails' parseAccelerator accepts (single
  * printable chars plus the named keys) while excluding fragile combos like a
  * bare modifier or the Windows key alone.
  */
+
+import { isMac } from "./platform";
 
 const NAMED_KEYS: Record<string, string> = {
   " ": "Space",
@@ -19,7 +26,21 @@ const NAMED_KEYS: Record<string, string> = {
   End: "End",
 };
 
+/** The main modifier of the platform: Cmd on macOS, Ctrl elsewhere. */
+export function modKey(): "Cmd" | "Ctrl" {
+  return isMac() ? "Cmd" : "Ctrl";
+}
+
 function modifierOf(e: KeyboardEvent): string | null {
+  if (isMac()) {
+    // mac order: Cmd, Ctrl, Option, Shift (⌘⌃⌥⇧).
+    const parts: string[] = [];
+    if (e.metaKey) parts.push("Cmd");
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    return parts.length ? parts.join("+") : null;
+  }
   const parts: string[] = [];
   if (e.ctrlKey) parts.push("Ctrl");
   if (e.altKey) parts.push("Alt");
@@ -55,7 +76,28 @@ export function formatCombo(e: KeyboardEvent): string | null {
   return `${mod}+${main}`;
 }
 
-/** Human-readable display of an accelerator (already +-joined). */
+/**
+ * Splits an accelerator into display parts. On macOS the modifiers render as
+ * their symbol glyphs (⌘⌥⇧⌃); elsewhere they stay as words (Ctrl/Alt/Shift).
+ * Main keys are kept verbatim. Used by the shortcut cheatsheet <kbd> rows.
+ */
+export function displayParts(combo: string): string[] {
+  const macSymbols: Record<string, string> = {
+    Cmd: "⌘",
+    Ctrl: "⌃",
+    Alt: "⌥",
+    Option: "⌥",
+    Shift: "⇧",
+  };
+  const parts = combo.split("+").filter(Boolean);
+  if (!isMac()) return parts;
+  return parts.map((p) => macSymbols[p] ?? p);
+}
+
+/** Human-readable display of an accelerator. */
 export function displayCombo(combo: string): string {
-  return combo || "—";
+  if (!combo) return "—";
+  const parts = displayParts(combo);
+  // macOS glyphs join without separators (⌘⇧S); word modifiers keep "+".
+  return isMac() ? parts.join("") : parts.join("+");
 }

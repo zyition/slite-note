@@ -5,6 +5,7 @@ import { BlockNoteSchema, defaultBlockSpecs, markdownToBlocks } from "@blocknote
 import type { Block, PartialBlock } from "@blocknote/core";
 import { BlockSideMenu } from "./BlockSideMenu";
 import { onShow } from "../services/bridge";
+import { isMac } from "../services/platform";
 import type { Note } from "../types/note";
 
 /**
@@ -127,13 +128,15 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
     };
   }, [editor, placeCaret]);
 
-  // Ctrl+Enter toggles the checklist item under the caret (Notion/Typora
-  // convention). BlockNote has no built-in binding and the slash menu does
-  // not show this, so we handle it ourselves. Capture phase: it must work
-  // even when ProseMirror has focus.
+  // Ctrl+Enter (Windows) / Cmd+Enter (macOS) toggles the checklist item
+  // under the caret (Notion/Typora convention). BlockNote has no built-in
+  // binding and the slash menu does not show this, so we handle it ourselves.
+  // Capture phase: it must work even when ProseMirror has focus.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.altKey || e.metaKey || e.key !== "Enter") return;
+      const mod = isMac() ? e.metaKey : e.ctrlKey;
+      const foreign = isMac() ? e.ctrlKey : e.metaKey;
+      if (!mod || foreign || e.altKey || e.key !== "Enter") return;
       const { block } = editor.getTextCursorPosition();
       if (block.type !== "checkListItem") return;
       e.preventDefault();
