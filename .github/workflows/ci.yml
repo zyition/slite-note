@@ -124,11 +124,12 @@ jobs:
           PACKAGE_MANAGER: pnpm
         # Boots the app on the runner's window server, creates + shows the
         # window, prints SMOKE OK and exits 0 — the only runtime verification
-        # of the native startup path without real hardware. Guard with timeout
-        # in case the app hangs.
+        # of the native startup path without real hardware. macOS has no GNU
+        # `timeout`, so perl's alarm guards against a hang (SIGALRM kills the
+        # exec'd process after 30s; exit code 142 fails the job).
         run: |
           set -e
-          timeout 30 bin/slite-note --smoke || exit $?
+          perl -e 'alarm 30; exec @ARGV' bin/slite-note --smoke
 
 
       - name: wails build
