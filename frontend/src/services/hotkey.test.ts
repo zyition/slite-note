@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+
+// Default module load: platform mocked to non-mac so the Windows/Linux path
+// is exercised identically on every host (a mac runner's navigator.platform
+// is "MacIntel" and would otherwise flip these tests to the mac path).
+vi.mock("./platform", () => ({ isMac: () => false }));
+
 import { displayCombo, formatCombo } from "./hotkey";
 
 const key = (partial: Partial<KeyboardEvent>): KeyboardEvent =>
@@ -10,6 +16,15 @@ const key = (partial: Partial<KeyboardEvent>): KeyboardEvent =>
     key: "",
     ...partial,
   }) as KeyboardEvent;
+
+/** Load hotkey.ts with a forced platform; returns the module's exports. */
+async function loadHotkey(mac: boolean) {
+  vi.resetModules();
+  vi.doMock("./platform", () => ({ isMac: () => mac }));
+  const mod = await import("./hotkey");
+  vi.doUnmock("./platform");
+  return mod;
+}
 
 describe("formatCombo (Windows/Linux path)", () => {
   it("formats modifier + letter combos", () => {
@@ -69,14 +84,11 @@ describe("formatCombo (Windows/Linux path)", () => {
 
 describe("formatCombo (macOS path)", () => {
   it("maps the meta key to Cmd (not Super) so Wails registers it", async () => {
-    vi.resetModules();
-    vi.doMock("./platform", () => ({ isMac: () => true }));
-    const mac = await import("./hotkey");
-    expect(mac.formatCombo(key({ metaKey: true, key: "k" }))).toBe("Cmd+K");
-    expect(
-      mac.formatCombo(key({ metaKey: true, shiftKey: true, key: "t" })),
-    ).toBe("Cmd+Shift+T");
-    vi.doUnmock("./platform");
+    const { formatCombo: fmt } = await loadHotkey(true);
+    expect(fmt(key({ metaKey: true, key: "k" }))).toBe("Cmd+K");
+    expect(fmt(key({ metaKey: true, shiftKey: true, key: "t" }))).toBe(
+      "Cmd+Shift+T",
+    );
   });
 });
 
@@ -88,12 +100,9 @@ describe("displayCombo", () => {
   });
 
   it("renders mac glyphs with no separators (macOS path)", async () => {
-    vi.resetModules();
-    vi.doMock("./platform", () => ({ isMac: () => true }));
-    const mac = await import("./hotkey");
-    expect(mac.displayCombo("Cmd+Shift+S")).toBe("⌘⇧S");
-    expect(mac.displayCombo("Alt+Shift+S")).toBe("⌥⇧S");
-    expect(mac.displayCombo("")).toBe("—");
-    vi.doUnmock("./platform");
+    const { displayCombo: dc } = await loadHotkey(true);
+    expect(dc("Cmd+Shift+S")).toBe("⌘⇧S");
+    expect(dc("Alt+Shift+S")).toBe("⌥⇧S");
+    expect(dc("")).toBe("—");
   });
 });
