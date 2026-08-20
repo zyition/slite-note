@@ -9,7 +9,7 @@
 ## 功能
 
 - **全局热键**（默认 `Alt+Shift+S`，可在设置中改）任意场景唤起/隐藏窗口，无需聚焦
-- **关闭 = 隐藏**：驻留系统托盘，从托盘菜单退出
+- **关闭 = 隐藏**：驻留后台（Windows 系统托盘 / macOS 菜单栏）；从托盘/菜单退出，macOS 亦可用 `Cmd+Q`
 - **置顶图钉**、**窗口透明度**（50–100%）、**主题跟随系统深/浅色**（或固定便签黄）
 - **窗口位置记忆**：大小与位置跨重启保留；显示器拔出时自动回退默认位置
 - **静默自启动**：登录时不弹窗，热键唤出
@@ -23,15 +23,23 @@
 ## 安装
 
 - **Windows 10/11**，需 [WebView2 运行时]（多数系统已内置；安装包可在旧机器上自动补装）。
+- **macOS 13+**（Apple Silicon 与 Intel 均可）。未做开发者签名：首次打开会有 Gatekeeper“无法验证开发者”提示 —— 右键点按 App → **打开**，或执行一次 `xattr -cr /Applications/slite-note.app`。
 
 ### 渠道
 
 | 渠道 | 方式 |
 |---|---|
-| GitHub Releases | `slite-note-setup.exe`（NSIS 安装包）或便携版 `slite-note-<ver>-windows-amd64.zip` |
+| GitHub Releases（Windows） | `slite-note-amd64-installer.exe`（NSIS 安装包）或便携版 `slite-note-<ver>-windows-amd64.zip` |
+| GitHub Releases（macOS） | `slite-note.dmg` —— 拖 `slite-note.app` 进“应用程序”（Universal：Apple Silicon + Intel） |
 | 源码构建 | 见下方 |
 
 > 便携版需系统已装 WebView2；安装包在旧机器上会自动安装。
+
+### 平台差异
+
+- **快捷键**：macOS 用 `Cmd`、Windows 用 `Ctrl`（⌘B/⌘N/⌘, …）。切换便签：Windows 为 `Ctrl+Tab` / `Ctrl+Shift+Tab`，macOS 为 `Cmd+Shift+]` / `Cmd+Shift+[`（系统的 `Ctrl+Tab`/`Cmd+Tab` 保留）。快捷键面板（`Mod+Shift+/`）显示当前平台组合。
+- **透明度**：Windows 为整窗淡出；macOS 仅背景透出（文字保持清晰）。
+- **菜单栏**：macOS 增加 **Settings…**（`Cmd+,`）；`Cmd+W` 隐藏窗口（等同关闭按钮），`Cmd+Q` 退出。
 
 ## 构建
 
@@ -39,10 +47,13 @@
 
 ```bash
 cd frontend && pnpm install     # 前端依赖
-wails3 build                    # 产物 bin\slite-note.exe
+wails3 build                    # 产物 bin\slite-note.exe（Windows）
+wails3 task darwin:build        # 产物 bin/slite-note（macOS，须在 macOS 上执行）
 ```
 
 > Windows 下需 `PACKAGE_MANAGER=pnpm`，且 PATH 含 mise shims 与 wails3 所在目录。
+
+> macOS 构建必须在 macOS 上完成（cgo/ObjC 桥接，不可交叉编译）；发布 CI 产出 Universal `slite-note.dmg`（arm64 + amd64，ad-hoc 签名），命令为 `wails3 task darwin:package:universal:dmg`。
 
 ### 纯浏览器调试 UI
 
@@ -56,10 +67,10 @@ cd frontend && pnpm dev         # http://localhost:9245
 
 | 内容 | 位置 |
 |---|---|
-| 便签 | `%APPDATA%\slite\notes.json`（单文件，设置页 *Change location…* 可迁移） |
-| 设置 | `%APPDATA%\slite\settings.json` |
-| WebView2 数据 | `%LOCALAPPDATA%\slite\webview` |
-| 日志 | `%APPDATA%\slite\log.txt`（仅调试） |
+| 便签 | Windows `%APPDATA%\slite\notes.json` / macOS `~/Library/Application Support/slite/notes.json`（单文件，设置页 *Change location…* 可迁移） |
+| 设置 | Windows `%APPDATA%\slite\settings.json` / macOS `~/Library/Application Support/slite/settings.json` |
+| WebView 数据 | Windows `%LOCALAPPDATA%\slite\webview` |
+| 日志 | 数据目录 `log.txt`（仅调试） |
 
 ## 隐私
 

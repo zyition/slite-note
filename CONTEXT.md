@@ -21,7 +21,7 @@ _Avoid_: 标题字段, heading
 _Avoid_: 重命名（作为动词短语）, title override（作为 UI 概念）
 
 **Quick Switch**:
-窗口内 `Ctrl+Tab` / `Ctrl+Shift+Tab` 循环切换 Note（编辑器聚焦时同样生效）。
+窗口内循环切换 Note 的快捷键（编辑器聚焦时同样生效）。Windows 为 `Ctrl+Tab` / `Ctrl+Shift+Tab`；macOS 为 `Cmd+Shift+[` / `Cmd+Shift+]`（避开系统级 Ctrl+Tab）。
 _Avoid_: 标签页切换, tab switching
 
 **Theme**:
@@ -33,19 +33,19 @@ _Avoid_: skin, mode
 _Avoid_: pin（作为名词）, 钉住
 
 **Opacity**:
-窗口透明度（50–100%），设置页滑块调节，经 Win32 `WS_EX_LAYERED` 应用并持久化。
+窗口透明度（50–100%），设置页滑块调节并持久化。平台语义不同：Windows 为整体 alpha（经 Win32 `WS_EX_LAYERED`），macOS 为背景 alpha（内容保持清晰，经 Backdrop + `SetBackgroundColour`）。
 _Avoid_: alpha, 不透明度（作为设置项名）
 
 **Global Hotkey**:
-系统级快捷键（默认 `Alt+Shift+S`，可配置），切换窗口显示/隐藏，应用无需聚焦。
+系统级快捷键（默认 `Alt+Shift+S`，可配置，跨平台一致；macOS 上 Alt=Option），切换窗口显示/隐藏，应用无需聚焦。
 _Avoid_: shortcut（作为系统级概念）, 快捷键
 
 **Tray**:
-系统托盘图标及菜单（显示/隐藏、退出）。关闭按钮隐藏窗口后，Tray 是退出应用的唯一入口。
+系统驻留图标及菜单（显示/隐藏、退出）。关闭按钮隐藏窗口后，Tray 是退出应用的唯一入口。Windows 为系统托盘图标，macOS 为菜单栏图标（单击弹菜单，遵循 mac 惯例）。
 _Avoid_: 托盘图标（仅指图标）, notification area
 
 **Hide / Summon**:
-关闭按钮将窗口隐藏（应用驻留后台）；Global Hotkey 或 Tray 唤起窗口。
+关闭按钮（macOS 亦含 `Cmd+W`）将窗口隐藏（应用驻留后台）；Global Hotkey 或 Tray 唤起窗口。
 _Avoid_: minimize（与系统最小化混淆）, 最小化
 
 **Silent Launch**:
@@ -60,7 +60,7 @@ Note 数据持久化抽象层（接口），当前为单文件实现，未来可
 _Avoid_: storage（与浏览器 localStorage 混淆）, 存储
 
 **Data Directory**:
-Note 与 Settings 的存储目录（默认 `%APPDATA%\slite`），可在设置页通过 "Change location…" 迁移。
+Note 与 Settings 的存储目录（默认 Windows `%APPDATA%\slite` / macOS `~/Library/Application Support/slite`），可在设置页通过 "Change location…" 迁移。
 _Avoid_: data dir（作为领域词，裸词）, 数据文件夹
 
 **Vault**:

@@ -1,6 +1,6 @@
 # slite-note
 
-A minimal sticky-note desktop app for Windows. One slim window hosts a
+A minimal sticky-note desktop app for Windows and macOS. One slim window hosts a
 block-based rich-text editor (BlockNote); notes are stored locally as a single
 JSON file. The window hides and summons with a global hotkey — an always-ready
 scratchpad that stays out of your way.
@@ -13,8 +13,8 @@ scratchpad that stays out of your way.
 
 - **Global hotkey** (`Alt+Shift+S` by default, reconfigurable) toggles the
   window from anywhere — no focus needed
-- **Close = hide**: the app stays resident in the system tray; quit from the
-  tray menu
+- **Close = hide**: the app stays resident (system tray on Windows, menu bar on
+  macOS); quit from the tray/menu or `Cmd+Q` (macOS)
 - **Always on top** pin, **opacity** (50–100%), theme following the OS light /
   dark mode (or a manual sticky-note yellow)
 - **Window position memory**: size and placement survive restarts; a window
@@ -33,16 +33,31 @@ scratchpad that stays out of your way.
 
 - **Windows 10/11** with the [WebView2 runtime]
   (preinstalled on most systems; the installer bundles it when missing).
+- **macOS 13+** (Apple Silicon or Intel). No Developer-ID signature: the first
+  launch shows a Gatekeeper "unidentified developer" warning — right-click the
+  app → **Open**, or run `xattr -cr /Applications/slite-note.app` once.
 
 ### Options
 
 | Channel | How |
 |---|---|
-| GitHub Releases | `slite-note-amd64-installer.exe` (NSIS installer) or portable `slite-note-<ver>-windows-amd64.zip` |
+| GitHub Releases (Windows) | `slite-note-amd64-installer.exe` (NSIS installer) or portable `slite-note-<ver>-windows-amd64.zip` |
+| GitHub Releases (macOS) | `slite-note.dmg` — drag `slite-note.app` into Applications (Universal: Apple Silicon + Intel) |
 | From source | see [Building](#building) |
 
 > The portable zip needs WebView2 already installed. The installer will set it
 > up automatically on older machines.
+
+### Platform notes
+
+- **Shortcuts** use `Cmd` on macOS and `Ctrl` on Windows (⌘B/⌘N/⌘, …). Note
+  switching: `Ctrl+Tab` / `Ctrl+Shift+Tab` on Windows, `Cmd+Shift+]` /
+  `Cmd+Shift+[` on macOS (system `Ctrl+Tab`/`Cmd+Tab` stay reserved). The
+  cheatsheet (`Mod+Shift+/`) shows the current platform's combos.
+- **Opacity** means the whole window fades on Windows, while on macOS only the
+  note background becomes see-through (text stays crisp).
+- The macOS menu bar adds **Settings…** (`Cmd+,`), and `Cmd+W` hides the window
+  like the close button; `Cmd+Q` quits.
 
 ## Building
 
@@ -50,11 +65,16 @@ Toolchain: Go 1.25+, Node/pnpm, and the [Wails v3 CLI].
 
 ```bash
 cd frontend && pnpm install     # frontend deps
-wails3 build                    # → bin/slite-note.exe
+wails3 build                    # → bin/slite-note.exe (Windows)
+wails3 task darwin:build        # → bin/slite-note (macOS; run on macOS)
 ```
 
 > On Windows, ensure `PACKAGE_MANAGER=pnpm` and `wails3` (plus mise shims) are
 > on `PATH`.
+
+> macOS builds must run on macOS (cgo/ObjC bridge — no cross-compilation).
+> Release CI builds a Universal `slite-note.dmg` (arm64 + amd64, ad-hoc
+> signed) via `wails3 task darwin:package:universal:dmg`.
 
 ### Browser-only UI development
 
@@ -69,10 +89,10 @@ cd frontend && pnpm dev         # http://localhost:9245
 
 | What | Where |
 |---|---|
-| Notes | `%APPDATA%\slite\notes.json` (single file, relocatable via Settings → *Change location…*) |
-| Settings | `%APPDATA%\slite\settings.json` |
-| WebView2 data | `%LOCALAPPDATA%\slite\webview` |
-| Logs | `%APPDATA%\slite\log.txt` (debug only) |
+| Notes | `%APPDATA%\slite\notes.json` on Windows / `~/Library/Application Support/slite/notes.json` on macOS (single file, relocatable via Settings → *Change location…*) |
+| Settings | `%APPDATA%\slite\settings.json` on Windows / `~/Library/Application Support/slite/settings.json` on macOS |
+| WebView data | `%LOCALAPPDATA%\slite\webview` (Windows) |
+| Logs | `log.txt` inside the data dir (debug only) |
 
 ## Privacy
 
