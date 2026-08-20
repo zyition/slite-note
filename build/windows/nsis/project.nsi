@@ -84,7 +84,7 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 # Enable HiDPI support. https://nsis.sourceforge.io/Reference/ManifestDPIAware
 ManifestDPIAware true
 
-!include "MUI.nsh"
+!include "MUI2.nsh"
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -104,7 +104,12 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
 !insertmacro MUI_UNPAGE_CONFIRM # Confirm uninstall page.
-!insertmacro MUI_UNPAGE_CUSTOM un.DeleteDataPage un.DeleteDataPageLeave # Ask whether to remove user data (default: keep).
+# MUI2 has no UNPAGE_CUSTOM macro - PageEx with the un. prefix declares an
+# uninstaller page, slotting the "Remove user data" page between Confirm
+# and the actual uninstall.
+PageEx un.custom
+  PageCallbacks un.DeleteDataPage un.DeleteDataPageLeave
+PageExEnd
 !insertmacro MUI_UNPAGE_INSTFILES # Uninstalling page
 
 !insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
