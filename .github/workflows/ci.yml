@@ -59,6 +59,78 @@ jobs:
         # compiles cleanly on windows-latest.
         run: go test ./...
 
+  # macOS port: no real hardware locally, so a macOS runner is the only place
+  # the darwin build-tagged files (platform_darwin.go, store_platform_darwin.go)
+  # get compiled and vetted. Builds the native binary to prove the cgo + Wails
+  # darwin path links, but does not package (that happens on release).
+  macos-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install wails3 CLI
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Frontend type check
+        working-directory: frontend
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc --noEmit
+
+      - name: Frontend unit tests (vitest)
+        working-directory: frontend
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: pnpm test
+
+      - name: Build frontend (for go:embed)
+        working-directory: frontend
+        run: pnpm exec vite build
+
+      - name: Go vet (darwin build tags)
+        run: go vet .
+
+      - name: Go tests (darwin build tags)
+        run: go test ./...
+
+      - name: Build native binary (darwin)
+        env:
+          PACKAGE_MANAGER: pnpm
+        # build:native compiles with CGO_ENABLED=1 for the cgo ObjC bridge;
+        # this is the compile check for the macOS-specific files.
+        run: wails3 task darwin:build
+
+      - name: Launch smoke test (--smoke)
+        env:
+          PACKAGE_MANAGER: pnpm
+        # Boots the app on the runner's window server, creates + shows the
+        # window, prints SMOKE OK and exits 0 — the only runtime verification
+        # of the native startup path without real hardware. Guard with timeout
+        # in case the app hangs.
+        run: |
+          set -e
+          timeout 30 bin/slite-note --smoke || exit $?
+
+
       - name: wails build
         env:
           PACKAGE_MANAGER: pnpm

@@ -9,12 +9,11 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # git-cliff needs the full history + tags to build the changelog.
           fetch-depth: 0
 
       - uses: actions/setup-go@v7
@@ -45,10 +44,6 @@ jobs:
         run: |
           echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Install git-cliff
-        uses: taiki-e/install-action@v2
-        with:
-          tool: git-cliff
       - name: Set version from tag
         shell: pwsh
         # Single source of truth: the release tag (vX.Y.Z). The About-section
@@ -86,8 +81,87 @@ jobs:
         run: |
           Compress-Archive -Path bin\slite-note.exe -DestinationPath "bin\slite-note-${{ github.ref_name }}-windows-amd64.zip"
 
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            bin/*-installer.exe
+            bin/slite-note-*-windows-amd64.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install wails3 CLI
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Set version from tag
+        # Inject the tag into the bundle metadata (Info.plist) and the Go
+        # binary (ldflags -X main.appVersion via VERSION=).
+        run: |
+          ver="${{ github.ref_name }}"
+          ver="${ver#v}"
+          plutil -replace CFBundleShortVersionString -string "$ver" build/darwin/Info.plist
+          plutil -replace CFBundleVersion -string "$ver" build/darwin/Info.plist
+          echo "VERSION=$ver" >> $GITHUB_ENV
+
+      - name: Build universal .dmg (arm64 + amd64, ad-hoc signed)
+        env:
+          PACKAGE_MANAGER: pnpm
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        # build:universal lipos arm64+amd64 into bin/slite-note, wraps it in
+        # slite-note.app (codesign:adhoc), then packages a styled dmg.
+        # Unsigned side-load build: no Developer ID / notarization — users
+        # right-click → Open (Gatekeeper) or run `xattr -cr` (ADR-0009).
+        run: wails3 task darwin:package:universal:dmg VERSION=$ver
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: bin/slite-note.dmg
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # git-cliff needs the full history + tags to build the changelog.
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
       - name: Generate changelog and release body
-        shell: pwsh
+        shell: bash
         # Single source of truth: the release tag (vX.Y.Z). git-cliff reads
         # git history + Conventional Commits (cliff.toml) and regenerates
         # CHANGELOG.md; the same run emits the release description for the
@@ -95,34 +169,35 @@ jobs:
         run: |
           git-cliff --tag "${{ github.ref_name }}" -o CHANGELOG.md
           git-cliff --latest --tag "${{ github.ref_name }}" -o release-body.md
-          $body = Get-Content release-body.md -Raw
-          $body += "`n`n---`nFull changelog: https://github.com/zyition/slite-note/blob/master/CHANGELOG.md"
-          Set-Content -Path release-body.md -Value $body -Encoding UTF8
-          Write-Host "Release body:"
-          Write-Host $body
+          echo "" >> release-body.md
+          echo "---" >> release-body.md
+          echo "Full changelog: https://github.com/zyition/slite-note/blob/master/CHANGELOG.md" >> release-body.md
+          echo "Release body:"
+          cat release-body.md
 
       - name: Commit regenerated CHANGELOG.md to the default branch
-        shell: pwsh
+        shell: bash
         # Keep the repo changelog in sync with the release: the tag push runs
         # on a detached HEAD, so switch to the default branch and push the
         # regenerated file back. No-op when nothing changed.
         run: |
-          $branch = "${{ github.event.repository.default_branch }}"
-          git fetch origin $branch
-          git checkout $branch
-          if (git diff --quiet -- CHANGELOG.md) {
-            Write-Host "CHANGELOG.md unchanged, nothing to commit"
-          } else {
+          branch="${{ github.event.repository.default_branch }}"
+          git fetch origin "$branch"
+          git checkout "$branch"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md unchanged, nothing to commit"
+          else
             git add CHANGELOG.md
             git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "docs: changelog for ${{ github.ref_name }}"
-            git push origin $branch
-            Write-Host "CHANGELOG.md committed to $branch"
-          }
+            git push origin "$branch"
+            echo "CHANGELOG.md committed to $branch"
+          fi
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
           body_path: release-body.md
           files: |
-            bin/*-installer.exe
-            bin/slite-note-*-windows-amd64.zip
+            artifacts/*-installer.exe
+            artifacts/slite-note-*-windows-amd64.zip
+            artifacts/slite-note.dmg
