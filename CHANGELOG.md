@@ -1,3 +1,12 @@
+## [0.7.0] - 2026-08-21
+
+### Features
+
+- *(ui)* Add Simplified Chinese localization with language picker
+
+### Bug Fixes
+
+- *(ui)* Normalize user-facing app name to "Slite Note"
 ## [0.6.1] - 2026-08-21
 
 ### Performance
