@@ -149,7 +149,7 @@ func main() {
 
 	settings := store.currentSettings()
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "slite-note",
+		Title:            "Slite Note",
 		Width:            initialWidth,
 		Height:           480,
 		MinWidth:         280,
@@ -500,8 +500,8 @@ func flushBoundsSave() {
 func setupTray() {
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
-	tray.SetTooltip("slite-note")
-	tray.SetLabel("slite-note")
+	tray.SetTooltip("Slite Note")
+	tray.SetLabel("Slite Note")
 
 	menu := app.NewMenu()
 	menu.Add("Show/Hide").OnClick(func(ctx *application.Context) {

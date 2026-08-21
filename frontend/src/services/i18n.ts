@@ -4,7 +4,7 @@
  */
 
 const en = {
-  appName: "slite-note",
+  appName: "Slite Note",
   untitled: "Untitled",
   newNote: "New note",
   notes: "Notes",
@@ -33,16 +33,16 @@ const en = {
   pressNewHotkey: "Press the new shortcut…",
   hotkeyChangeFailed: "Could not set that shortcut",
   autoStartSection: "Launch at startup",
-  autoStartDesc: "Start slite automatically when you sign in to your computer.",
+  autoStartDesc: "Start Slite Note automatically when you sign in to your computer.",
   dataSection: "Data location",
   dataDesc:
-    "Notes and settings are stored in this folder. Move them to a new location, or point slite at an existing one.",
+    "Notes and settings are stored in this folder. Move them to a new location, or point Slite Note at an existing one.",
   openExplorer: "Open in Explorer",
   changeLocationTitle: "Move data to another folder",
   moveData: "Change location…",
-  migrateDone: "Done — notes moved, slite now uses the new folder.",
+  migrateDone: "Done — notes moved, Slite Note now uses the new folder.",
   useExisting: "Use existing…",
-  useExistingDone: "Done — slite now reads notes from the selected folder.",
+  useExistingDone: "Done — Slite Note now reads notes from the selected folder.",
   nativeOnly: "Only available in the desktop app.",
   cancel: "Cancel",
   opacitySection: "Window opacity",
@@ -61,7 +61,7 @@ const en = {
   shortcutGroupGlobal: "Global",
   shortcutGroupApp: "App",
   shortcutGroupFormatting: "Formatting",
-  sToggleWindow: "Show / Hide slite",
+  sToggleWindow: "Show / Hide Slite Note",
   sNextNote: "Next note",
   sPrevNote: "Previous note",
   sNewNote: "New note",
@@ -82,7 +82,7 @@ const en = {
   homepageLabel: "Homepage",
   licenseLabel: "License",
   aboutDesc:
-    "slite-note. A minimal sticky note for your desktop. Built with Wails, BlockNote, React, Tailwind and lucide.",
+    "Slite Note. A minimal sticky note for your desktop. Built with Wails, BlockNote, React, Tailwind and lucide.",
 };
 
 export const t: typeof en = en;
