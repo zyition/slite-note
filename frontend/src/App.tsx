@@ -6,7 +6,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import type { Note, Settings, ThemeName } from "./types/note";
 import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
-import { deriveTitle } from "./services/title";
+import { TitleCache } from "./services/titleCache";
 import { isMac } from "./services/platform";
 import { THEMES, resolveTheme, onSystemThemeChange } from "./services/theme";
 import { t } from "./services/i18n";
@@ -45,6 +45,13 @@ export default function App() {
   // diff-save: only notes whose blocks/title/updatedAt reference moved get
   // written, ids that vanished get deleted.
   const lastSavedRef = useRef<Map<string, Note>>(new Map());
+  // Per-note display-title cache (see services/titleCache.ts): a title is
+  // re-derived only when that note's blocks/title reference moves, so editing
+  // one note never recomputes every other note's title.
+  const titleCacheRef = useRef<TitleCache | null>(null);
+  if (titleCacheRef.current === null) {
+    titleCacheRef.current = new TitleCache();
+  }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -210,6 +217,7 @@ export default function App() {
     (id: string) => {
       const prev = notesRef.current;
       const next = prev.filter((n) => n.id !== id);
+      titleCacheRef.current?.delete(id);
       if (next.length === 0) {
         // Keep at least one note so the editor always has a home.
         next.push(makeNote());
@@ -285,7 +293,7 @@ export default function App() {
   }, [flushSave]);
 
   const titleFor = useCallback(
-    (note: Note) => (note.title.trim() ? note.title : deriveTitle(note.blocks)),
+    (note: Note) => titleCacheRef.current!.titleFor(note),
     [],
   );
 
@@ -421,12 +429,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [cycleTheme, createNote]);
 
-  const titles = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const n of notes) m.set(n.id, titleFor(n));
-    return m;
-  }, [notes, titleFor]);
-
   const activeNote = notes.find((n) => n.id === activeId) ?? null;
 
   /* ---------------- render ---------------- */
@@ -440,7 +442,7 @@ export default function App() {
       <TitleBar
         notes={notes}
         activeId={activeId}
-        titleFor={(n) => titles.get(n.id) ?? ""}
+        titleFor={titleFor}
         pinned={settings.alwaysOnTop}
         onSelect={setActiveId}
         onNewNote={createNote}
