@@ -48,15 +48,18 @@ jobs:
         shell: pwsh
         # Single source of truth: the release tag (vX.Y.Z). The About-section
         # version (store.go) is injected at build time via ldflags -X (see
-        # Taskfile build VERSION=...); this step only rewrites the exe metadata
-        # (build/windows/info.json) before building, so a release never ships
-        # a stale version.
+        # Taskfile build VERSION=...); this step rewrites the exe metadata
+        # (build/windows/info.json) and exports VERSION via $GITHUB_ENV so the
+        # build/package steps below pick it up (pwsh variables do not survive
+        # across steps). Ascii encoding: version strings are pure ASCII and a
+        # BOM would corrupt the env file parser.
         run: |
           $ver = "${{ github.ref_name }}".TrimStart('v')
           $info = Get-Content build/windows/info.json -Raw
           $info = $info -replace '"file_version": "[^"]*"', ('"file_version": "' + $ver + '"')
           $info = $info -replace '"ProductVersion": "[^"]*"', ('"ProductVersion": "' + $ver + '"')
           Set-Content build/windows/info.json -NoNewline $info
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           Write-Host "Version set to $ver"
 
       - name: Build
@@ -64,17 +67,18 @@ jobs:
         env:
           PACKAGE_MANAGER: pnpm
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
-        # VERSION injects the tag into the Go binary via ldflags -X
-        # main.appVersion (About-section version).
-        run: wails3 task build VERSION=$ver
+        # VERSION (exported via GITHUB_ENV above) injects the tag into the Go
+        # binary via ldflags -X main.appVersion (About-section version).
+        run: wails3 task build VERSION=$env:VERSION
 
       - name: Package NSIS installer (per-user)
+        shell: pwsh
         env:
           PACKAGE_MANAGER: pnpm
         # VERSION propagates the tag to INFO_PRODUCTVERSION so the installer
         # and the ARP registry DisplayVersion match the built exe (the stock
         # wails_tools.nsh hard-codes 0.1.0).
-        run: wails3 task windows:package INSTALL_SCOPE=user VERSION=$ver
+        run: wails3 task windows:package INSTALL_SCOPE=user VERSION=$env:VERSION
 
       - name: Build portable zip
         shell: pwsh
@@ -132,7 +136,8 @@ jobs:
         # slite-note.app (codesign:adhoc), then packages a styled dmg.
         # Unsigned side-load build: no Developer ID / notarization — users
         # right-click → Open (Gatekeeper) or run `xattr -cr` (ADR-0009).
-        run: wails3 task darwin:package:universal:dmg VERSION=$ver
+        # $VERSION comes from GITHUB_ENV set in the Set version step above.
+        run: wails3 task darwin:package:universal:dmg VERSION=$VERSION
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
