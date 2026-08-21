@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { t } from "../services/i18n";
-import { formatCombo, displayCombo } from "../services/hotkey";
+import { formatCombo, displayParts } from "../services/hotkey";
 import {
   appVersion,
   chooseDataDir,
@@ -256,9 +256,16 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                   {t.pressNewHotkey}
                 </span>
               ) : (
-                <kbd className="flex-1 rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 text-[11px] font-semibold">
-                  {displayCombo(settings.hotkey)}
-                </kbd>
+                <span className="flex flex-1 items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5">
+                  {displayParts(settings.hotkey).map((part) => (
+                    <kbd key={part} className="slite-kbd">
+                      {part}
+                    </kbd>
+                  ))}
+                  {!settings.hotkey && (
+                    <span className="text-[11px] text-[var(--fg-muted)]">—</span>
+                  )}
+                </span>
               )}
               <button
                 className={primaryBtn}
