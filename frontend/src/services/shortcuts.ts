@@ -33,11 +33,14 @@ export interface ShortcutDef {
   group: ShortcutGroup;
 }
 
-export const SHORTCUT_GROUPS: { id: ShortcutGroup; label: string }[] = [
-  { id: "global", label: t.shortcutGroupGlobal },
-  { id: "app", label: t.shortcutGroupApp },
-  { id: "formatting", label: t.shortcutGroupFormatting },
-];
+/**
+ * Cheatsheet groups in render order. The display label is NOT cached here:
+ * it is resolved per-render from the live `t` proxy (ShortcutsPanel maps
+ * group.id → t.shortcutGroup*), so switching language re-renders correctly.
+ * (A module-level label constant would capture the English strings once at
+ * import time — the i18n bug fixed here.)
+ */
+export const SHORTCUT_GROUPS: ShortcutGroup[] = ["global", "app", "formatting"];
 
 /** The primary modifier token of the platform (Wails accelerator syntax). */
 const MOD = isMac() ? "Cmd" : "Ctrl";

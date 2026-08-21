@@ -846,6 +846,13 @@ func (s *Store) readSettingsFile(path string) Settings {
 	if settings.Theme == "" {
 		settings.Theme = "system"
 	}
+	// Normalize opacity on read too, not just on save: a fresh install has no
+	// settings.json, so the zero value (0.0) reaches the frontend and renders
+	// --bg-opacity: 0% — an almost fully transparent first-launch window.
+	// Anything below the slider floor or above 1 means "not set" → opaque.
+	if settings.Opacity < windowutil.OpacityFloor || settings.Opacity > 1 {
+		settings.Opacity = 1
+	}
 	return settings
 }
 

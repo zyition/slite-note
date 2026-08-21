@@ -2,14 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
+		<key>CFBundleDisplayName</key>
+		<string>Slite Note</string>
 		<key>CFBundleExecutable</key>
 		<string>slite-note</string>
 		<key>CFBundleGetInfoString</key>
 		<string>slide + lite: a minimal sticky note that glides in and out</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
-		<key>CFBundleIconName</key>
-		<string>appicon</string>
 		<key>CFBundleIdentifier</key>
 		<string>com.zyition.slite-note</string>
 		<key>CFBundleName</key>
@@ -17,9 +17,9 @@
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
-		<string>0.1.0</string>
+		<string>0.7.1</string>
 		<key>CFBundleVersion</key>
-		<string>0.1.0</string>
+		<string>0.7.1</string>
 		<key>LSMinimumSystemVersion</key>
 		<string>12.0.0</string>
 		<key>NSHighResolutionCapable</key>

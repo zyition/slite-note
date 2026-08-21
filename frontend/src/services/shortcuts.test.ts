@@ -18,7 +18,7 @@ async function loadShortcuts(mac: boolean) {
 
 describe("appShortcuts (Windows/Linux path)", () => {
   it("every shortcut has an id, at least one combo, a label and a valid group", () => {
-    const groups = new Set(SHORTCUT_GROUPS.map((g) => g.id));
+    const groups = new Set(SHORTCUT_GROUPS);
     for (const s of appShortcuts()) {
       expect(s.id).toBeTruthy();
       expect(s.keys.length).toBeGreaterThan(0);

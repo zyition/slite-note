@@ -130,16 +130,20 @@ export default function App() {
     // note background carries the alpha — pass it through so the window
     // background matches the CSS. Windows ignores the alpha channel of
     // SetBackgroundColour (its whole-window alpha is applied natively).
-    const bgAlpha = isMac() ? Math.round(settings.opacity * 255) : 255;
-    void setWindowBackground(...THEMES[appliedTheme].rgb, bgAlpha);
+    // Clamp the alpha to the opacity floor: a persisted 0 (e.g. a legacy
+    // settings file) would otherwise make the very first frame see-through.
+    const alpha = isMac() ? Math.round(Math.max(0.3, settings.opacity) * 255) : 255;
+    void setWindowBackground(...THEMES[appliedTheme].rgb, alpha);
   }, [appliedTheme, settings.opacity]);
 
   // macOS note-background translucency: the CSS background (body + title bar)
   // is mixed with transparency via --bg-opacity. Overlays (settings, theme
   // picker, shortcuts) force 100% — matching the Windows opacity override.
+  // Clamped to the opacity floor (30%) so a stale/zero opacity value can
+  // never blank the whole window.
   useEffect(() => {
     const opaque = settingsOpen || themePickerOpen || languagePickerOpen || shortcutsOpen || !isMac();
-    const pct = opaque ? 100 : Math.round(settings.opacity * 100);
+    const pct = opaque ? 100 : Math.max(30, Math.round(settings.opacity * 100));
     document.documentElement.style.setProperty("--bg-opacity", `${pct}%`);
   }, [settings.opacity, settingsOpen, themePickerOpen, shortcutsOpen]);
 

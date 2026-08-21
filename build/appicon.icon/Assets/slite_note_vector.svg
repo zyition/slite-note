@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <!-- Slite Note app icon: a yellow sticky note with folded corner.
+         Geometry mirrors tools/genicon (drawIcon) so the Asset Catalog icon
+         matches build/appicon.png / icons/tray.png exactly. -->
+    <g>
+        <!-- note body -->
+        <rect x="64" y="64" width="896" height="896" rx="192" fill="#FFD64F"/>
+        <!-- folded corner (bottom-right) -->
+        <path d="M960,576L960,960L576,960Z" fill="#E8B300"/>
+        <!-- fold hypotenuse edge -->
+        <path d="M576,960L960,576" fill="none" stroke="#9A7B00" stroke-width="8"/>
+        <!-- text lines (three "content" strokes) -->
+        <rect x="192" y="224" width="640" height="64" rx="32" fill="#B89A2E"/>
+        <rect x="192" y="352" width="512" height="64" rx="32" fill="#B89A2E"/>
+        <rect x="192" y="480" width="384" height="64" rx="32" fill="#B89A2E"/>
+        <!-- outline -->
+        <rect x="64" y="64" width="896" height="896" rx="192" fill="none" stroke="#9A7B00" stroke-width="8"/>
+    </g>
+</svg>

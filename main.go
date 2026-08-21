@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -223,14 +224,21 @@ func main() {
 			go smokeCheck()
 			return
 		}
-		// Wait for the WebView2 to finish loading, then position and show the
+		// Wait for the WebView to finish loading, then position and show the
 		// window in one step: the first visible frame is already at the left
-		// edge, so no post-hoc repositioning (no visible jump). On a silent
-		// launch (--silent, e.g. auto-start) the window stays hidden and is
-		// summoned via hotkey/tray.
-		mainWindow.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+		// edge, so no post-hoc repositioning (no visible jump). The navigation-
+		// completed event is platform-specific: Windows emits
+		// events.Windows.WebViewNavigationCompleted, macOS emits
+		// events.Mac.WebViewDidFinishNavigation (the Windows event never fires
+		// there — without this the startup placement only ever ran via the
+		// 4s safety net below, so the window kept its default centered position).
+		// On a silent launch (--silent, e.g. auto-start) the window stays hidden
+		// and is summoned via hotkey/tray.
+		positionAndShow := func(*application.WindowEvent) {
 			showMainWindowAtStartup()
-		})
+		}
+		mainWindow.OnWindowEvent(events.Windows.WebViewNavigationCompleted, positionAndShow)
+		mainWindow.OnWindowEvent(events.Mac.WebViewDidFinishNavigation, positionAndShow)
 		// Safety net for the rare case the navigation event never fires.
 		time.AfterFunc(4*time.Second, showMainWindowAtStartup)
 	})
@@ -370,18 +378,33 @@ func resumeToggleHotkey() error {
 // the Wails call goes through InvokeSync + setBounds and is unreliable for a
 // still-hidden window (the window ends up centered), and its setBounds path
 // also re-applies LWA_ALPHA=255 which would clobber the window opacity.
-func positionWindowAtStartup() {
+//
+// Returns true when a placement was applied, false when no screen geometry
+// was available yet (the startup path then re-runs it shortly).
+func positionWindowAtStartup() bool {
 	st := store.currentSettings()
 	if st.WindowWidth > 0 && st.WindowHeight > 0 &&
 		boundsVisible(st.WindowX, st.WindowY, st.WindowWidth, st.WindowHeight) {
 		w := max(st.WindowWidth, minWidth)
 		setWindowBounds(st.WindowX, st.WindowY, w, max(st.WindowHeight, minHeight))
-		return
+		debugLog("position: restored saved bounds %d,%d %dx%d", st.WindowX, st.WindowY, w, st.WindowHeight)
+		return true
 	}
+	// Primary may be nil if the screen cache has not been populated yet (it is
+	// filled on ApplicationDidFinishLaunching). Never fall back to Center() here:
+	// centering makes a sticky note feel like a dialog and differs from the
+	// Windows "left edge, 1/3 width" default; prefer the first known screen and
+	// keep the left-edge placement, or report "not placed" so the caller can
+	// retry once screens are known.
 	screen := app.Screen.GetPrimary()
 	if screen == nil {
-		mainWindow.Center()
-		return
+		if all := app.Screen.GetAll(); len(all) > 0 {
+			screen = all[0]
+		}
+	}
+	if screen == nil {
+		debugLog("position: no screen info yet; deferring placement")
+		return false
 	}
 	pwa := screen.PhysicalWorkArea
 	width := pwa.Width / 3
@@ -389,6 +412,9 @@ func positionWindowAtStartup() {
 		width = minWidth
 	}
 	setWindowBounds(pwa.X, pwa.Y, width, pwa.Height)
+	debugLog("position: default left-edge 1/3 placement %d,%d %dx%d (primary=%v)",
+		pwa.X, pwa.Y, width, pwa.Height, screen.IsPrimary)
+	return true
 }
 
 // boundsVisible reports whether the given rect (physical pixels) overlaps any
@@ -433,14 +459,23 @@ func showMainWindow() {
 	mainWindow.Focus()
 }
 
-// showMainWindowAtStartup positions the window once the WebView2 has settled
-// and shows it (unless this is a silent launch). Runs at most once.
+// showMainWindowAtStartup positions the window once the WebView has settled
+// and shows it (unless this is a silent launch). Runs at most once; if screen
+// geometry was not available yet, the placement itself is retried shortly.
 func showMainWindowAtStartup() {
 	if positionedOnce {
 		return
 	}
 	positionedOnce = true
-	positionWindowAtStartup()
+	if !positionWindowAtStartup() {
+		// Screen cache not populated yet (macOS fills it after launch): re-run
+		// the placement once it is, so a sticky note never stays centered on
+		// the very first boot. The window may already be visible by then; the
+		// re-position is what the user expects from "remember my window".
+		time.AfterFunc(500*time.Millisecond, func() {
+			positionWindowAtStartup()
+		})
+	}
 	applyWindowOpacity()
 	if !silentStart {
 		showMainWindow()
@@ -501,7 +536,12 @@ func setupTray() {
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip("Slite Note")
-	tray.SetLabel("Slite Note")
+	// On macOS the label renders as text next to the status-bar icon (NSStatusItem
+	// title), which eats menu-bar space and looks wrong for a sticky-note tray;
+	// Windows ignores SetLabel entirely (empty impl), so skip it everywhere.
+	if runtime.GOOS != "darwin" {
+		tray.SetLabel("Slite Note")
+	}
 
 	menu := app.NewMenu()
 	menu.Add("Show/Hide").OnClick(func(ctx *application.Context) {

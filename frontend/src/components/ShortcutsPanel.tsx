@@ -51,6 +51,18 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
     return rows;
   };
 
+  /** Group heading text, resolved from the live i18n proxy per render. */
+  const groupLabel = (group: ShortcutGroup): string => {
+    switch (group) {
+      case "global":
+        return t.shortcutGroupGlobal;
+      case "app":
+        return t.shortcutGroupApp;
+      case "formatting":
+        return t.shortcutGroupFormatting;
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center bg-black/30 p-4 pt-14"
@@ -80,12 +92,12 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
 
         <div className="max-h-[78vh] space-y-3 overflow-y-auto px-3 py-3">
           {SHORTCUT_GROUPS.map((group) => {
-            const rows = rowsFor(group.id);
+            const rows = rowsFor(group);
             if (rows.length === 0) return null;
             return (
-              <section key={group.id}>
+              <section key={group}>
                 <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-                  {group.label}
+                  {groupLabel(group)}
                 </h3>
                 <ul className="space-y-1">
                   {rows.map((row) => (
@@ -94,9 +106,9 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
                       className="flex items-center justify-between gap-3 py-0.5 text-[11px] text-[var(--fg)]"
                     >
                       <span className="min-w-0 leading-tight">{row.label}</span>
-                      <span className="flex shrink-0 items-center gap-1">
+                      <span className="flex shrink-0 items-center gap-1.5">
                         {row.keys.map((combo, i) => (
-                          <span key={`${combo}-${i}`} className="flex items-center gap-0.5">
+                          <span key={`${combo}-${i}`} className="flex items-center gap-1">
                             {i > 0 && <span className="text-[var(--fg-muted)]">·</span>}
                             {displayParts(combo).map((part) => (
                               <kbd key={part} className="slite-kbd">

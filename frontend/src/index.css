@@ -8,6 +8,10 @@
 
 :root,
 [data-theme="yellow"] {
+  /* --bg-opacity (set by App.tsx) drives the note-background translucency on
+     macOS. Explicitly defaulting it to 100% here (not just in the var()
+     fallback) keeps the very first painted frame opaque before React mounts. */
+  --bg-opacity: 100%;
   --bg: #fff8dc;
   --bg-titlebar: #f6e9a9;
   --bg-input: rgba(122, 94, 14, 0.1);
