@@ -1,3 +1,8 @@
+## [0.7.1] - 2026-08-21
+
+### Bug Fixes
+
+- *(mac)* Correct startup window placement, tray, icon and first-launch opacity
 ## [0.7.0] - 2026-08-21
 
 ### Features
