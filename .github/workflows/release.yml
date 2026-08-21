@@ -133,7 +133,7 @@ jobs:
           PACKAGE_MANAGER: pnpm
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         # build:universal lipos arm64+amd64 into bin/slite-note, wraps it in
-        # slite-note.app (codesign:adhoc), then packages a styled dmg.
+        # Slite Note.app (codesign:adhoc), then packages a styled dmg.
         # Unsigned side-load build: no Developer ID / notarization — users
         # right-click → Open (Gatekeeper) or run `xattr -cr` (ADR-0009).
         # $VERSION comes from GITHUB_ENV set in the Set version step above.

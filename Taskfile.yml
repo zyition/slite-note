@@ -2,6 +2,10 @@ version: '3'
 
 vars:
   APP_NAME: "slite-note"
+  # macOS displays the .app directory name, not CFBundleDisplayName, in
+  # Finder/Spotlight — so the bundle must be "Slite Note.app" even though the
+  # executable (and Windows products) keep the lowercase slite-note name.
+  APP_BUNDLE_NAME: "Slite Note"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
