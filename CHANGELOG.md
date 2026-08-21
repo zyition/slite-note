@@ -1,3 +1,9 @@
+## [0.7.2] - 2026-08-21
+
+### Bug Fixes
+
+- *(ui)* Space out modifier keys in settings hotkey row
+- *(darwin)* Bundle the app as "Slite Note.app" so Finder/Spotlight show the right name
 ## [0.7.1] - 2026-08-21
 
 ### Bug Fixes
