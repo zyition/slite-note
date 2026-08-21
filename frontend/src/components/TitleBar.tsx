@@ -1,8 +1,9 @@
 import { FilePlus, Keyboard, Minus, Pin, PinOff, Settings as SettingsIcon, X } from "lucide-react";
-import type { Note, ThemeName } from "../types/note";
+import type { Note, ThemeName, LanguageName } from "../types/note";
 import { t } from "../services/i18n";
 import { NotePicker } from "./NotePicker";
 import { ThemePicker } from "./ThemePicker";
+import { LanguagePicker } from "./LanguagePicker";
 
 interface TitleBarProps {
   notes: Note[];
@@ -15,6 +16,12 @@ interface TitleBarProps {
   themeChoice: ThemeName;
   /** Resolved concrete theme actually in effect. */
   appliedTheme: Exclude<ThemeName, "system">;
+  /** User's persisted language choice ("system" included). */
+  language: LanguageName;
+  /** Apply + persist a new language choice. */
+  onSelectLanguage: (choice: LanguageName) => void;
+  /** Notifies the app while the language popover is up. */
+  onLanguagePickerOpenChange?: (open: boolean) => void;
   onSelectTheme: (choice: ThemeName) => void;
   onThemePickerOpenChange: (open: boolean) => void;
   onTogglePin: () => void;
@@ -43,6 +50,9 @@ export function TitleBar(props: TitleBarProps) {
     onNewNote,
     themeChoice,
     appliedTheme,
+    language,
+    onSelectLanguage,
+    onLanguagePickerOpenChange,
     onSelectTheme,
     onThemePickerOpenChange,
     onTogglePin,
@@ -88,6 +98,12 @@ export function TitleBar(props: TitleBarProps) {
           <PinOff size={13} />
         )}
       </button>
+
+      <LanguagePicker
+        choice={language}
+        onSelect={onSelectLanguage}
+        onOpenChange={onLanguagePickerOpenChange}
+      />
 
       <ThemePicker
         choice={themeChoice}

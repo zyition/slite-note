@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef } from "react";
 import { useCreateBlockNote, SideMenuController } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { BlockNoteSchema, defaultBlockSpecs, markdownToBlocks } from "@blocknote/core";
+import { zh } from "@blocknote/core/locales";
 import type { Block, PartialBlock } from "@blocknote/core";
 import { BlockSideMenu } from "./BlockSideMenu";
 import { onShow } from "../services/bridge";
 import { isMac } from "../services/platform";
+import { useLocale } from "../services/i18n";
 import type { Note } from "../types/note";
 
 /**
@@ -61,8 +63,13 @@ export interface NoteConverter {
  * stored position stays valid.
  */
 export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: EditorProps) {
+  const locale = useLocale();
   const editor = useCreateBlockNote({
     schema: sliteSchema,
+    // BlockNote ships official locale dictionaries (zh from @blocknote/core/locales);
+    // en is the built-in default. The App remounts this editor by note id + locale
+    // so the dictionary is (re)applied on language switch.
+    dictionary: locale === "zh-CN" ? zh : undefined,
     initialContent: (note.blocks?.length ? note.blocks : undefined) as
       | PartialBlock[]
       | undefined,

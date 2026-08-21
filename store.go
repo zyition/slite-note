@@ -27,11 +27,12 @@ type Note struct {
 
 // Settings holds app-level preferences persisted across restarts.
 type Settings struct {
-	Theme           string  `json:"theme"` // "system" | "yellow" | "gray" | "dark"
+	Theme           string  `json:"theme"`           // "system" | "yellow" | "gray" | "dark"
 	AlwaysOnTop     bool    `json:"alwaysOnTop"`
 	Hotkey          string  `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
 	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
+	Language        string  `json:"language"`        // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
 
 	// Window bounds in physical pixels, persisted (debounced) on move/resize
 	// so the window reopens where the user left it. 0 = never saved yet.

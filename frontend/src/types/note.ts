@@ -13,6 +13,20 @@ export type ThemeName = "system" | "yellow" | "gray" | "dark";
 // or force one of the concrete themes. Order = theme-picker order.
 export const THEME_NAMES: ThemeName[] = ["system", "dark", "gray", "yellow"];
 
+/** UI language: follow the OS, or force a concrete locale. */
+export type LanguageName = "system" | "en" | "zh-CN";
+
+// Order = language-picker order.
+export const LANGUAGES: LanguageName[] = ["system", "en", "zh-CN"];
+
+/**
+ * Normalize a persisted language value (may be "" from older settings) to a
+ * valid LanguageName. "" means follow the OS, same as "system".
+ */
+export function normalizeLanguage(v: unknown): LanguageName {
+  return v === "en" || v === "zh-CN" ? v : "system";
+}
+
 /** UUID with a fallback for insecure origins (crypto.randomUUID needs a
  * secure context; the browser-fallback mode may run on plain http). */
 export function uuid(): string {
@@ -44,6 +58,7 @@ export function makeSettings(partial?: Partial<Settings>): Settings {
     hotkey: "Alt+Shift+S",
     launchAtStartup: false,
     opacity: 1,
+    language: "system",
     windowX: 0,
     windowY: 0,
     windowWidth: 0,

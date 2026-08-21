@@ -51,6 +51,11 @@ export interface Settings {
     "opacity": number;
 
     /**
+     * "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
+     */
+    "language": string;
+
+    /**
      * Window bounds in physical pixels, persisted (debounced) on move/resize
      * so the window reopens where the user left it. 0 = never saved yet.
      * Owned by the Go side (SaveWindowBounds); the frontend must not set them.

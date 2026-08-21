@@ -4,12 +4,12 @@ import { TitleBar } from "./components/TitleBar";
 import { Editor, type NoteConverter } from "./components/Editor";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
-import type { Note, Settings, ThemeName } from "./types/note";
-import { makeNote, makeSettings, THEME_NAMES } from "./types/note";
+import type { Note, Settings, ThemeName, LanguageName } from "./types/note";
+import { makeNote, makeSettings, THEME_NAMES, normalizeLanguage } from "./types/note";
 import { TitleCache } from "./services/titleCache";
 import { isMac } from "./services/platform";
 import { THEMES, resolveTheme, onSystemThemeChange } from "./services/theme";
-import { t } from "./services/i18n";
+import { t, useLocale, setLocale, resolveChoice } from "./services/i18n";
 import {
   loadNotes,
   loadSettings,
@@ -38,6 +38,8 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Whether the theme picker popover is up (drives the window-opacity lift).
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  // Whether the language picker popover is up (drives the window-opacity lift).
+  const [languagePickerOpen, setLanguagePickerOpen] = useState(false);
 
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
@@ -86,7 +88,13 @@ export default function App() {
       }
       lastSavedRef.current = new Map(list.map((n) => [n.id, n]));
       setNotes(list);
-      setSettings({ ...makeSettings(), ...loadedSettings });
+      // Normalize a legacy/empty language ("") to "system" before storing.
+      const baseSettings = { ...makeSettings(), ...loadedSettings };
+      baseSettings.language = normalizeLanguage(baseSettings.language);
+      setSettings(baseSettings);
+      // Resolve the UI language once at startup: follow the OS unless the
+      // user previously picked a concrete locale (see resolveChoice).
+      setLocale(resolveChoice(baseSettings.language));
       setActiveId(list[list.length - 1]?.id ?? null);
       setReady(true);
     })();
@@ -94,6 +102,13 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  /* ---------------- language ---------------- */
+
+  // Re-render the tree on setLocale so components reading `t` pick up the
+  // new language (t is a live proxy; the subscription just triggers updates).
+  // Also used to remount the editor so BlockNote's locale dictionary applies.
+  const locale = useLocale();
 
   /* ---------------- theme side effects ---------------- */
 
@@ -123,7 +138,7 @@ export default function App() {
   // is mixed with transparency via --bg-opacity. Overlays (settings, theme
   // picker, shortcuts) force 100% — matching the Windows opacity override.
   useEffect(() => {
-    const opaque = settingsOpen || themePickerOpen || shortcutsOpen || !isMac();
+    const opaque = settingsOpen || themePickerOpen || languagePickerOpen || shortcutsOpen || !isMac();
     const pct = opaque ? 100 : Math.round(settings.opacity * 100);
     document.documentElement.style.setProperty("--bg-opacity", `${pct}%`);
   }, [settings.opacity, settingsOpen, themePickerOpen, shortcutsOpen]);
@@ -132,7 +147,7 @@ export default function App() {
   // while open — translucency is only useful while editing content behind.
   useEffect(() => {
     if (!ready) return;
-    void setWindowOpacityOverride(settingsOpen || themePickerOpen || shortcutsOpen);
+    void setWindowOpacityOverride(settingsOpen || themePickerOpen || languagePickerOpen || shortcutsOpen);
   }, [ready, settingsOpen, themePickerOpen, shortcutsOpen]);
 
   /* ---------------- persistence ---------------- */
@@ -264,6 +279,16 @@ export default function App() {
   const selectTheme = useCallback(
     (choice: ThemeName) => {
       persistSettings({ ...settings, theme: choice });
+    },
+    [persistSettings, settings],
+  );
+
+  // Language choice: resolve + apply immediately, persist for next launch.
+  // After a manual pick the UI no longer follows the OS language.
+  const selectLanguage = useCallback(
+    (choice: LanguageName) => {
+      setLocale(resolveChoice(choice));
+      persistSettings({ ...settings, language: choice });
     },
     [persistSettings, settings],
   );
@@ -444,6 +469,9 @@ export default function App() {
         activeId={activeId}
         titleFor={titleFor}
         pinned={settings.alwaysOnTop}
+        language={settings.language as LanguageName}
+        onSelectLanguage={selectLanguage}
+        onLanguagePickerOpenChange={setLanguagePickerOpen}
         onSelect={setActiveId}
         onNewNote={createNote}
         themeChoice={settings.theme as ThemeName}
@@ -463,7 +491,7 @@ export default function App() {
       <main className="min-h-0 flex-1 overflow-y-auto">
         {activeNote && (
           <Editor
-            key={activeNote.id}
+            key={`${activeNote.id}:${locale}`}
             note={activeNote}
             blocknoteTheme={THEMES[appliedTheme].blocknote}
             onChange={updateActiveBlocks}

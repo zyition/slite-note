@@ -6,6 +6,7 @@ import {
   themeSwatch,
   THEMES,
 } from "./theme";
+import { setLocale } from "./i18n";
 
 describe("resolveTheme", () => {
   it("passes concrete themes through", () => {
@@ -25,6 +26,15 @@ describe("theme helpers", () => {
     expect(themeName("dark")).toBe("Dark");
     expect(themeName("gray")).toBe("Gray");
     expect(themeName("yellow")).toBe("Yellow");
+  });
+
+  it("localizes theme names in Chinese", () => {
+    setLocale("zh-CN");
+    expect(themeName("dark")).toBe("深色");
+    expect(themeName("gray")).toBe("灰色");
+    expect(themeName("yellow")).toBe("黄色");
+    expect(themeLabel("system", "dark")).toBe("系统（深色）");
+    setLocale("en");
   });
 
   it("themeSwatch mirrors the theme rgb", () => {

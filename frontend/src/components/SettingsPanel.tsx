@@ -291,7 +291,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
               />
             </button>
             <span className="ml-2 align-middle text-[11px]">
-              {settings.launchAtStartup ? "On" : "Off"}
+              {settings.launchAtStartup ? t.on : t.off}
             </span>
           </section>
 

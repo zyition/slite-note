@@ -39,6 +39,7 @@ describe("makeSettings", () => {
       hotkey: "Alt+Shift+S",
       launchAtStartup: false,
       opacity: 1,
+      language: "system",
       windowX: 0,
       windowY: 0,
       windowWidth: 0,

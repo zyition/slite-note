@@ -1,4 +1,5 @@
 import type { ThemeName } from "../types/note";
+import { t } from "./i18n";
 
 export interface ThemeDef {
   /** CSS variables applied via [data-theme] (see index.css). */
@@ -40,15 +41,15 @@ export function onSystemThemeChange(cb: () => void): () => void {
   return () => mq.removeEventListener("change", h);
 }
 
-/** Short display name of a concrete theme (theme-picker rows). */
+/** Short display name of a concrete theme (theme-picker rows), localized. */
 export function themeName(theme: Exclude<ThemeName, "system">): string {
   switch (theme) {
     case "dark":
-      return "Dark";
+      return t.themeDark;
     case "gray":
-      return "Gray";
+      return t.themeGray;
     case "yellow":
-      return "Yellow";
+      return t.themeYellow;
   }
 }
 
@@ -63,5 +64,5 @@ export function themeLabel(
   choice: ThemeName,
   applied: Exclude<ThemeName, "system">,
 ): string {
-  return choice === "system" ? `System (${themeName(applied)})` : themeName(applied);
+  return choice === "system" ? t.themeSystemLabel(themeName(applied)) : themeName(applied);
 }
