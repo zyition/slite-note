@@ -544,11 +544,19 @@ func smokeCheck() {
 	applyWindowOpacity()
 	if !silentStart {
 		showMainWindow()
-		// Show may be async on some platforms; give it a beat before checking.
-		time.Sleep(200 * time.Millisecond)
-		if !mainWindow.IsVisible() {
-			log.Println("SMOKE FAIL: window not visible after show")
-			os.Exit(1)
+		// Window visibility is async on macOS: IsVisible() maps to
+		// NSWindow.occlusionState, which WindowServer only flips after it
+		// composites the first frame (CI runners have no real display session,
+		// so the delay is variable). Poll instead of a fixed 200ms sleep so a
+		// slow-but-healthy window does not fail the smoke test; the deadline
+		// still catches a window that genuinely never appears.
+		deadline := time.Now().Add(5 * time.Second)
+		for !mainWindow.IsVisible() {
+			if time.Now().After(deadline) {
+				log.Println("SMOKE FAIL: window not visible after show")
+				os.Exit(1)
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 	debugLog("smoke ok")
