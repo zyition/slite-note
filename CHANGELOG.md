@@ -1,3 +1,8 @@
+## [0.6.1] - 2026-08-21
+
+### Performance
+
+- *(frontend)* Cache note titles per-note on edits
 ## [0.6.0] - 2026-08-20
 
 ### Features
