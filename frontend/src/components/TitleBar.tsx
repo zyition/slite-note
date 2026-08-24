@@ -67,10 +67,10 @@ export function TitleBar(props: TitleBarProps) {
   } = props;
 
   const iconBtn =
-    "no-drag flex h-6 w-6 items-center justify-center rounded text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]";
+    "no-drag inline-flex h-[length:var(--btn-h)] w-[length:var(--btn-h)] shrink-0 items-center justify-center rounded-md text-[var(--fg-muted)] transition-colors duration-150 hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)]";
 
   return (
-    <header className="titlebar flex h-10 shrink-0 items-center gap-0.5 border-b border-[var(--border)] px-2">
+    <header className="titlebar flex h-[length:var(--titlebar-h)] shrink-0 items-center gap-0.5 border-b border-[var(--border)] px-2">
       <NotePicker
         notes={notes}
         activeId={activeId}
@@ -85,7 +85,7 @@ export function TitleBar(props: TitleBarProps) {
       {/* Note action sits next to the note list, not among the window buttons:
           a bare "+" there read as maximize next to minimize. */}
       <button className={iconBtn} onClick={onNewNote} title={t.newNote}>
-        <FilePlus size={13} />
+        <FilePlus size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       {/* Empty drag zone: everything between the picker and the buttons drags the window. */}
@@ -93,9 +93,9 @@ export function TitleBar(props: TitleBarProps) {
 
       <button className={iconBtn} onClick={onTogglePin} title={t.alwaysOnTop} aria-pressed={pinned}>
         {pinned ? (
-          <Pin size={13} className="text-[var(--accent)]" fill="currentColor" />
+          <Pin size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)] text-[var(--accent)]" fill="currentColor" />
         ) : (
-          <PinOff size={13} />
+          <PinOff size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
         )}
       </button>
 
@@ -113,19 +113,19 @@ export function TitleBar(props: TitleBarProps) {
       />
 
       <button className={iconBtn} onClick={onOpenShortcuts} title={t.shortcutsTitle}>
-        <Keyboard size={13} />
+        <Keyboard size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       <button className={iconBtn} onClick={onOpenSettings} title={t.settings}>
-        <SettingsIcon size={13} />
+        <SettingsIcon size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       <button className={iconBtn} onClick={onHide} title={t.hide}>
-        <Minus size={13} />
+        <Minus size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       <button className={`${iconBtn} hover:bg-red-500/80 hover:text-white`} onClick={onClose} title={t.close}>
-        <X size={13} />
+        <X size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
     </header>
   );

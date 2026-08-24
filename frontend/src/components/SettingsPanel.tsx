@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, X } from "lucide-react";
+import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, Type, X } from "lucide-react";
 import type { Settings } from "../types/note";
+import { UI_SCALES, normalizeUiScale, type UiScaleName } from "../types/note";
 import { t } from "../services/i18n";
 import { formatCombo, displayParts } from "../services/hotkey";
 import {
@@ -17,6 +18,13 @@ import {
 } from "../services/bridge";
 
 const HOME_URL = "https://github.com/zyition/slite-note";
+
+// Window-opacity slider bounds. Kept as constants so the <input min/max> and
+// the track-fill percentage stay in sync (the fill must use the slider's
+// *relative* position, not the raw opacity value, or it overshoots the thumb).
+const OPACITY_MIN = 0.35;
+const OPACITY_MAX = 1;
+
 
 interface SettingsPanelProps {
   open: boolean;
@@ -199,18 +207,28 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
   if (!open) return null;
 
   // Backwards-compatible opacity: unset (0 / missing) means fully opaque.
-  const opacityValue = settings.opacity && settings.opacity >= 0.3 ? settings.opacity : 1;
+  const opacityValue =
+    settings.opacity && settings.opacity >= OPACITY_MIN ? settings.opacity : OPACITY_MAX;
+  // Slider-thumb position between min and max (0–100%), used to size the
+  // accent fill so it never runs past the thumb.
+  const opacityPct = ((opacityValue - OPACITY_MIN) / (OPACITY_MAX - OPACITY_MIN)) * 100;
+  const opacityLabel = Math.round(opacityValue * 100);
 
   const sectionLabel =
-    "mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]";
-  const primaryBtn =
-    "flex items-center gap-1 rounded bg-[var(--accent)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--accent-fg)] hover:opacity-90 disabled:opacity-50";
-  const secondaryBtn =
-    "flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-input)] px-2.5 py-1.5 text-[11px] font-medium hover:bg-[var(--hover)]";
+    "mb-1.5 flex items-center gap-1.5 text-[length:var(--fs-body)] font-semibold uppercase tracking-wide text-[var(--fg-muted)]";
+  // Shared button base: fixed touch height driven by --btn-h (so it scales
+  // with the uiScale), consistent icon sizing via [&_svg], smooth transitions
+  // and an explicit focus ring (shadcn-style).
+  const btnBase =
+    "inline-flex h-[length:var(--btn-h)] shrink-0 items-center justify-center gap-1.5 rounded-md text-[length:var(--fs-body)] font-medium transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:h-[length:var(--icon-sm)] [&_svg]:w-[length:var(--icon-sm)]";
+  const primaryBtn = `${btnBase} bg-[var(--accent)] px-3 text-[var(--accent-fg)] shadow-sm hover:opacity-90`;
+  const secondaryBtn = `${btnBase} border border-[var(--border)] bg-[var(--bg-input)] px-3 text-[var(--fg)] hover:bg-[var(--hover)]`;
+  const iconBtn =
+    "inline-flex h-[length:var(--btn-h)] w-[length:var(--btn-h)] shrink-0 items-center justify-center rounded-md text-[var(--fg-muted)] transition-colors duration-150 hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] [&_svg]:h-[length:var(--icon-sm)] [&_svg]:w-[length:var(--icon-sm)]";
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/30 p-4 pt-14"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/45 p-4 pt-14"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
@@ -219,27 +237,28 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
           captured. */}
       {recording && (
         <div className="pointer-events-none fixed inset-0 z-[102] flex items-start justify-center pt-24">
-          <span className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-[11px] font-medium text-[var(--accent-fg)] shadow">
+          <span className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-[length:var(--fs-body)] font-medium text-[var(--accent-fg)] shadow">
             {t.pressNewHotkey}
           </span>
         </div>
       )}
 
       <div
-        className="w-full max-w-80 rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-xl"
+        className="w-full max-w-80 rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label={t.settingsTitle}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-          <h2 className="text-[12px] font-semibold">{t.settingsTitle}</h2>
+          <h2 className="text-[length:var(--fs-title)] font-semibold">{t.settingsTitle}</h2>
           <button
-            className="rounded p-1 text-[var(--fg-muted)] hover:bg-[var(--hover)]"
+            className={iconBtn}
             onClick={handleClose}
             title={t.closePanel}
+            aria-label={t.closePanel}
           >
-            <X size={13} />
+            <X size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
           </button>
         </div>
 
@@ -247,12 +266,12 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
           {/* Global shortcut */}
           <section>
             <div className={sectionLabel}>
-              <Keyboard size={11} /> {t.hotkeySection}
+              <Keyboard size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.hotkeySection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.hotkeyDesc}</p>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.hotkeyDesc}</p>
             <div className="flex items-center gap-2">
               {recording ? (
-                <span className="flex-1 rounded border border-dashed border-[var(--accent)] px-2 py-1.5 text-[11px] text-[var(--accent)]">
+                <span className="flex-1 rounded border border-dashed border-[var(--accent)] px-2 py-1.5 text-[length:var(--fs-body)] text-[var(--accent)]">
                   {t.pressNewHotkey}
                 </span>
               ) : (
@@ -263,7 +282,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                     </kbd>
                   ))}
                   {!settings.hotkey && (
-                    <span className="text-[11px] text-[var(--fg-muted)]">—</span>
+                    <span className="text-[length:var(--fs-body)] text-[var(--fg-muted)]">—</span>
                   )}
                 </span>
               )}
@@ -274,15 +293,15 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 {recording ? t.cancel : t.changeHotkey}
               </button>
             </div>
-            {hotkeyError && <p className="mt-1.5 text-[10px] text-red-500">{hotkeyError}</p>}
+            {hotkeyError && <p className="mt-1.5 text-[length:var(--fs-desc)] text-red-500">{hotkeyError}</p>}
           </section>
 
           {/* Launch at startup */}
           <section>
             <div className={sectionLabel}>
-              <Power size={11} /> {t.autoStartSection}
+              <Power size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.autoStartSection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.autoStartDesc}</p>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.autoStartDesc}</p>
             <button
               role="switch"
               aria-checked={settings.launchAtStartup}
@@ -297,7 +316,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 }`}
               />
             </button>
-            <span className="ml-2 align-middle text-[11px]">
+            <span className="ml-2 align-middle text-[length:var(--fs-body)]">
               {settings.launchAtStartup ? t.on : t.off}
             </span>
           </section>
@@ -305,34 +324,70 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
           {/* Window opacity */}
           <section>
             <div className={sectionLabel}>
-              <Droplets size={11} /> {t.opacitySection}
+              <Droplets size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.opacitySection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.opacityDesc}</p>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.opacityDesc}</p>
             <div className="flex items-center gap-2">
               <input
                 type="range"
-                min={0.35}
-                max={1}
+                min={OPACITY_MIN}
+                max={OPACITY_MAX}
                 step={0.05}
                 value={opacityValue}
                 onChange={(e) => onChanged({ ...settings, opacity: Number(e.target.value) })}
-                className="flex-1 accent-[var(--accent)]"
+                className="slite-range flex-1"
+                style={{ "--range-pct": `${opacityPct}%` } as React.CSSProperties}
                 aria-label={t.opacitySection}
               />
-              <span className="w-10 text-right text-[11px] tabular-nums">
-                {Math.round(opacityValue * 100)}%
+              <span className="w-10 text-right text-[length:var(--fs-body)] tabular-nums">
+                {opacityLabel}%
               </span>
+            </div>
+          </section>
+
+          {/* Interface font size (small / medium / large) */}
+          <section>
+            <div className={sectionLabel}>
+              <Type size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.uiScaleSection}
+            </div>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.uiScaleDesc}</p>
+            <div
+              className="grid grid-cols-3 gap-1.5"
+              role="radiogroup"
+              aria-label={t.uiScaleSection}
+            >
+              {UI_SCALES.map((scale) => {
+                const current = normalizeUiScale(settings.uiScale);
+                const active = scale === current;
+                const label =
+                  scale === "small" ? t.uiScaleSmall : scale === "large" ? t.uiScaleLarge : t.uiScaleMedium;
+                return (
+                  <button
+                    key={scale}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => onChanged({ ...settings, uiScale: scale as UiScaleName })}
+                    className={`inline-flex h-[length:var(--btn-h)] shrink-0 items-center justify-center rounded-md text-[length:var(--fs-body)] font-medium transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] ${
+                      active
+                        ? "border border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm"
+                        : "border border-[var(--border)] bg-[var(--bg-input)] text-[var(--fg)] hover:bg-[var(--hover)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
           {/* Data location */}
           <section>
             <div className={sectionLabel}>
-              <FolderOpen size={11} /> {t.dataSection}
+              <FolderOpen size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.dataSection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.dataDesc}</p>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.dataDesc}</p>
             <div className="mb-1.5 flex items-stretch gap-1.5">
-              <div className="flex-1 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[10px]">
+              <div className="flex-1 break-all rounded border border-[var(--border)] bg-[var(--bg-input)] px-2 py-1.5 font-mono text-[length:var(--fs-desc)]">
                 {dataDir}
               </div>
               <button
@@ -340,7 +395,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 onClick={() => void openDataDir()}
                 title={t.openExplorer}
               >
-                <FolderOpen size={11} />
+                <FolderOpen size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
               </button>
             </div>
             <div className="flex gap-1.5">
@@ -350,9 +405,9 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 disabled={busyAction !== null}
               >
                 {busyAction === "move" ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Loader2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] animate-spin" />
                 ) : (
-                  <FolderSearch size={11} />
+                  <FolderSearch size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                 )}
                 {t.moveData}
               </button>
@@ -362,22 +417,22 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 disabled={busyAction !== null}
               >
                 {busyAction === "use" ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Loader2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] animate-spin" />
                 ) : (
-                  <FolderOpen size={11} />
+                  <FolderOpen size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                 )}
                 {t.useExisting}
               </button>
             </div>
             {migrateMsg && (
               <p
-                className={`mt-2 text-[10px] ${
+                className={`mt-2 text-[length:var(--fs-desc)] ${
                   migrateMsg.ok
                     ? "text-green-600 dark:text-green-400"
                     : "text-red-500"
                 }`}
               >
-                {migrateMsg.ok && <Check size={11} className="mr-1 inline" />}
+                {migrateMsg.ok && <Check size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] mr-1 inline" />}
                 {migrateMsg.text}
               </p>
             )}
@@ -385,23 +440,23 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
           {/* Markdown export */}
           <section>
             <div className={sectionLabel}>
-              <FileDown size={11} /> {t.exportAllSection}
+              <FileDown size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.exportAllSection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.exportAllDesc}</p>
-            <button className={secondaryBtn} onClick={() => void handleExportAll()} disabled={exporting}>
-              {exporting ? <Loader2 size={11} className="animate-spin" /> : <FileDown size={11} />}
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.exportAllDesc}</p>
+            <button className={primaryBtn} onClick={() => void handleExportAll()} disabled={exporting}>
+              {exporting ? <Loader2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] animate-spin" /> : <FileDown size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />}
               {t.exportAll}
             </button>
-            {exportMsg && <p className="mt-2 text-[10px] text-green-600 dark:text-green-400">{exportMsg}</p>}
+            {exportMsg && <p className="mt-2 text-[length:var(--fs-desc)] text-green-600 dark:text-green-400">{exportMsg}</p>}
           </section>
 
           {/* About */}
           <section>
             <div className={sectionLabel}>
-              <Info size={11} /> {t.aboutSection}
+              <Info size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.aboutSection}
             </div>
-            <p className="mb-2 text-[10px] leading-snug text-[var(--fg-muted)]">{t.aboutDesc}</p>
-            <div className="mb-1.5 space-y-1 text-[10px]">
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.aboutDesc}</p>
+            <div className="mb-1.5 space-y-1 text-[length:var(--fs-desc)]">
               <div className="flex justify-between">
                 <span className="text-[var(--fg-muted)]">{t.versionLabel}</span>
                 <span className="font-semibold">v{version}</span>
@@ -425,7 +480,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
                 </button>
               </div>
             </div>
-            <p className="text-[9px] leading-snug text-[var(--fg-muted)]">
+            <p className="text-[length:var(--fs-tiny)] leading-snug text-[var(--fg-muted)]">
               © {new Date().getFullYear()} zyition · Built with Wails, BlockNote, React, Tailwind &amp; lucide.
             </p>
           </section>

@@ -19,6 +19,20 @@ export type LanguageName = "system" | "en" | "zh-CN";
 // Order = language-picker order.
 export const LANGUAGES: LanguageName[] = ["system", "en", "zh-CN"];
 
+/** UI chrome font-size scale. "" / invalid falls back to "medium". */
+export type UiScaleName = "small" | "medium" | "large";
+
+// Order = ui-scale-picker order.
+export const UI_SCALES: UiScaleName[] = ["small", "medium", "large"];
+
+/**
+ * Normalize a persisted ui-scale value (may be "" from older settings) to a
+ * valid UiScaleName. Empty/unknown means medium (the default).
+ */
+export function normalizeUiScale(v: unknown): UiScaleName {
+  return v === "small" || v === "large" ? v : "medium";
+}
+
 /**
  * Normalize a persisted language value (may be "" from older settings) to a
  * valid LanguageName. "" means follow the OS, same as "system".
@@ -59,6 +73,7 @@ export function makeSettings(partial?: Partial<Settings>): Settings {
     launchAtStartup: false,
     opacity: 1,
     language: "system",
+    uiScale: "medium",
     windowX: 0,
     windowY: 0,
     windowWidth: 0,

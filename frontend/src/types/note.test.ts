@@ -40,6 +40,7 @@ describe("makeSettings", () => {
       launchAtStartup: false,
       opacity: 1,
       language: "system",
+      uiScale: "medium",
       windowX: 0,
       windowY: 0,
       windowWidth: 0,

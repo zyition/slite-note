@@ -33,6 +33,7 @@ type Settings struct {
 	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
 	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
 	Language        string  `json:"language"`        // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
+	UiScale         string  `json:"uiScale"`         // "small" | "medium" | "large"; "" = medium (default)
 
 	// Window bounds in physical pixels, persisted (debounced) on move/resize
 	// so the window reopens where the user left it. 0 = never saved yet.
@@ -132,6 +133,10 @@ func NewStore() *Store {
 	// Guarantee a concrete default so the UI always shows a real combo.
 	if s.settings.Hotkey == "" {
 		s.settings.Hotkey = defaultHotkey
+	}
+	// Normalize the UI scale: legacy/empty values fall back to "medium".
+	if s.settings.UiScale == "" {
+		s.settings.UiScale = "medium"
 	}
 	return s
 }
@@ -356,6 +361,9 @@ func (s *Store) LoadSettings() (Settings, error) {
 func (s *Store) SaveSettings(settings Settings) error {
 	if settings.Theme == "" {
 		settings.Theme = "system"
+	}
+	if settings.UiScale == "" {
+		settings.UiScale = "medium"
 	}
 	// Defensive clamp for the opacity slider.
 	if settings.Opacity < 0.3 {

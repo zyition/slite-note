@@ -66,7 +66,7 @@ export function ThemePicker({ choice, applied, onSelect, onOpenChange }: ThemePi
         aria-expanded={open}
         className="flex h-6 w-6 items-center justify-center rounded text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
       >
-        <Palette size={13} />
+        <Palette size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       {open && (
@@ -89,7 +89,7 @@ export function ThemePicker({ choice, applied, onSelect, onOpenChange }: ThemePi
                   onSelect(value);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[var(--fg)] hover:bg-[var(--hover)]"
+                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--fs-body)] text-[var(--fg)] hover:bg-[var(--hover)]"
               >
                 <span
                   className="h-3.5 w-3.5 shrink-0 rounded border border-[var(--border)]"
@@ -98,10 +98,10 @@ export function ThemePicker({ choice, applied, onSelect, onOpenChange }: ThemePi
                 <span className="min-w-0 flex-1 leading-tight">
                   <span className="block truncate">{isSystem ? systemLabel : themeName(concrete)}</span>
                   {isSystem && (
-                    <span className="block text-[9px] text-[var(--fg-muted)]">{t.themeFollowsOs}</span>
+                    <span className="block text-[length:var(--fs-tiny)] text-[var(--fg-muted)]">{t.themeFollowsOs}</span>
                   )}
                 </span>
-                {selected && <Check size={12} className="shrink-0 text-[var(--accent)]" />}
+                {selected && <Check size={12} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] shrink-0 text-[var(--accent)]" />}
               </button>
             );
           })}

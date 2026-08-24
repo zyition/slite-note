@@ -57,6 +57,13 @@ const en = {
   on: "On",
   off: "Off",
 
+  // Interface font size (settings)
+  uiScaleSection: "Interface font size",
+  uiScaleDesc: "Adjust the size of app interface text. Note content stays as-is.",
+  uiScaleSmall: "Small",
+  uiScaleMedium: "Medium",
+  uiScaleLarge: "Large",
+
   // Markdown export (settings)
   exportAllSection: "Markdown export",
   exportAllDesc: "Write every note as its own .md file into a folder of your choice.",
@@ -151,6 +158,12 @@ const zhCN: typeof en = {
   opacityDesc: "让便签呈半透明，100% 为完全不透明。",
   on: "开",
   off: "关",
+
+  uiScaleSection: "界面字体大小",
+  uiScaleDesc: "调整应用界面文字的大小。便签正文不受影响。",
+  uiScaleSmall: "小",
+  uiScaleMedium: "中",
+  uiScaleLarge: "大",
 
   exportAllSection: "导出 Markdown",
   exportAllDesc: "将每条便签导出为独立 .md 文件到所选文件夹。",

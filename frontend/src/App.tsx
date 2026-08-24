@@ -5,7 +5,7 @@ import { Editor, type NoteConverter } from "./components/Editor";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ShortcutsPanel } from "./components/ShortcutsPanel";
 import type { Note, Settings, ThemeName, LanguageName } from "./types/note";
-import { makeNote, makeSettings, THEME_NAMES, normalizeLanguage } from "./types/note";
+import { makeNote, makeSettings, THEME_NAMES, normalizeLanguage, normalizeUiScale } from "./types/note";
 import { TitleCache } from "./services/titleCache";
 import { isMac } from "./services/platform";
 import { THEMES, resolveTheme, onSystemThemeChange } from "./services/theme";
@@ -135,6 +135,12 @@ export default function App() {
     const alpha = isMac() ? Math.round(Math.max(0.3, settings.opacity) * 255) : 255;
     void setWindowBackground(...THEMES[appliedTheme].rgb, alpha);
   }, [appliedTheme, settings.opacity]);
+
+  // UI chrome font-size scale (small / medium / large) drives --fs-* tokens
+  // in index.css; keep <html> in sync with the persisted setting.
+  useEffect(() => {
+    document.documentElement.dataset.uiScale = normalizeUiScale(settings.uiScale);
+  }, [settings.uiScale]);
 
   // macOS note-background translucency: the CSS background (body + title bar)
   // is mixed with transparency via --bg-opacity. Overlays (settings, theme
@@ -519,7 +525,7 @@ export default function App() {
         <div className="pointer-events-none fixed inset-x-0 bottom-2 z-[110] flex justify-center">
           <div
             role="alert"
-            className="rounded-md bg-red-600 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg"
+            className="rounded-md bg-red-600 px-3 py-1.5 text-[length:var(--fs-body)] font-medium text-white shadow-lg"
           >
             {t.saveFailed}: {saveError}
           </div>

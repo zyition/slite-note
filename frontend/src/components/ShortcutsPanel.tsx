@@ -63,30 +63,34 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
     }
   };
 
+  const iconBtn =
+    "inline-flex h-[length:var(--btn-h)] w-[length:var(--btn-h)] shrink-0 items-center justify-center rounded-md text-[var(--fg-muted)] transition-colors duration-150 hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] [&_svg]:h-[length:var(--icon-sm)] [&_svg]:w-[length:var(--icon-sm)]";
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/30 p-4 pt-14"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/45 p-4 pt-14"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="w-full max-w-[340px] rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-xl"
+        className="w-full max-w-[340px] rounded-lg border border-[var(--border)] bg-[var(--bg)] shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label={t.shortcutsTitle}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-          <h2 className="flex items-center gap-1.5 text-[12px] font-semibold">
-            <Keyboard size={13} /> {t.shortcutsTitle}
+          <h2 className="flex items-center gap-1.5 text-[length:var(--fs-title)] font-semibold">
+            <Keyboard size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" /> {t.shortcutsTitle}
           </h2>
           <button
-            className="rounded p-1 text-[var(--fg-muted)] hover:bg-[var(--hover)]"
+            className={iconBtn}
             onClick={onClose}
             title={t.closePanel}
+            aria-label={t.closePanel}
           >
-            <X size={13} />
+            <X size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
           </button>
         </div>
 
@@ -96,14 +100,14 @@ export function ShortcutsPanel({ open, hotkey, onClose }: ShortcutsPanelProps) {
             if (rows.length === 0) return null;
             return (
               <section key={group}>
-                <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
+                <h3 className="mb-1 text-[length:var(--fs-body)] font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                   {groupLabel(group)}
                 </h3>
                 <ul className="space-y-1">
                   {rows.map((row) => (
                     <li
                       key={row.id}
-                      className="flex items-center justify-between gap-3 py-0.5 text-[11px] text-[var(--fg)]"
+                      className="flex items-center justify-between gap-3 py-0.5 text-[length:var(--fs-body)] text-[var(--fg)]"
                     >
                       <span className="min-w-0 leading-tight">{row.label}</span>
                       <span className="flex shrink-0 items-center gap-1.5">

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Languages } from "lucide-react";
 import type { LanguageName } from "../types/note";
 import { LANGUAGES } from "../types/note";
-import { t, useLocale } from "../services/i18n";
+import { t, useLocale, resolveLocale } from "../services/i18n";
 
 interface LanguagePickerProps {
   /** User's persisted choice ("system" included). */
@@ -25,9 +25,10 @@ interface LanguagePickerProps {
 export function LanguagePicker({ choice, onSelect, onOpenChange }: LanguagePickerProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  // Re-render when the active language changes (e.g. after switching) so the
-  // System row and tooltip show the resolved language immediately.
-  const locale = useLocale();
+  // Subscribe to language changes (and its return value is deliberately
+  // unused): switching the UI language must re-render this menu so the
+  // System row's prefix and all t.* labels update immediately.
+  void useLocale();
 
   // Let the app lift window opacity while the popover is open.
   useEffect(() => {
@@ -51,10 +52,16 @@ export function LanguagePicker({ choice, onSelect, onOpenChange }: LanguagePicke
     };
   }, [open]);
 
-  // The active language's own name (English / 简体中文) — identical in both
-  // locales, so t.langEnglish / t.langChinese work regardless of UI language.
-  const currentName = locale === "zh-CN" ? t.langChinese : t.langEnglish;
-  const systemLabel = t.langSystemLabel(currentName);
+  // The language that "follow the OS" actually resolves to. This is the
+  // SYSTEM language (via navigator.language), NOT the current UI language —
+  // so when the user sets the app to English, the "System" row still shows
+  // 简体中文 if the OS is Chinese. The prefix ("System" / "跟随系统") still
+  // follows the UI locale via t.langSystemLabel, but the parenthesised name
+  // is system-language-driven and locale-independent.
+  const systemLang =
+    typeof navigator !== "undefined" ? resolveLocale(navigator.language) : "en";
+  const systemName = systemLang === "zh-CN" ? t.langChinese : t.langEnglish;
+  const systemLabel = t.langSystemLabel(systemName);
   const tooltip = `${t.language}: ${
     choice === "system" ? systemLabel : choice === "zh-CN" ? t.langChinese : t.langEnglish
   }`;
@@ -70,7 +77,7 @@ export function LanguagePicker({ choice, onSelect, onOpenChange }: LanguagePicke
         aria-expanded={open}
         className="flex h-6 w-6 items-center justify-center rounded text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
       >
-        <Languages size={13} />
+        <Languages size={13} className="h-[length:var(--icon-md)] w-[length:var(--icon-md)]" />
       </button>
 
       {open && (
@@ -97,10 +104,10 @@ export function LanguagePicker({ choice, onSelect, onOpenChange }: LanguagePicke
                   onSelect(value);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[var(--fg)] hover:bg-[var(--hover)]"
+                className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[length:var(--fs-body)] text-[var(--fg)] hover:bg-[var(--hover)]"
               >
                 <span className="min-w-0 flex-1 leading-tight">{label}</span>
-                {selected && <Check size={12} className="shrink-0 text-[var(--accent)]" />}
+                {selected && <Check size={12} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] shrink-0 text-[var(--accent)]" />}
               </button>
             );
           })}

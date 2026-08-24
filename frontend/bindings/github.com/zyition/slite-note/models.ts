@@ -56,6 +56,11 @@ export interface Settings {
     "language": string;
 
     /**
+     * "small" | "medium" | "large"; "" = medium (default)
+     */
+    "uiScale": string;
+
+    /**
      * Window bounds in physical pixels, persisted (debounced) on move/resize
      * so the window reopens where the user left it. 0 = never saved yet.
      * Owned by the Go side (SaveWindowBounds); the frontend must not set them.

@@ -103,7 +103,7 @@ export function NotePicker({
   return (
     <div ref={rootRef} className="no-drag relative max-w-[55%]">
       <button
-        className="flex h-6 w-full max-w-52 items-center gap-1 rounded px-1.5 text-left text-[11px] font-medium hover:bg-[var(--hover)]"
+        className="flex h-6 w-full max-w-52 items-center gap-1 rounded px-1.5 text-left text-[length:var(--fs-body)] font-medium hover:bg-[var(--hover)]"
         onClick={() => {
           commitRename();
           setOpen((v) => !v);
@@ -113,13 +113,13 @@ export function NotePicker({
         <span className="min-w-0 flex-1 truncate">
           {active ? titleFor(active) || t.untitled : t.untitled}
         </span>
-        <ChevronDown size={12} className="shrink-0 text-[var(--fg-muted)]" />
+        <ChevronDown size={12} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] shrink-0 text-[var(--fg-muted)]" />
       </button>
 
       {open && (
         <div className="absolute left-0 top-7 z-50 max-h-56 w-56 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg)] p-1 shadow-lg">
           {notes.length === 0 && (
-            <div className="px-2 py-1.5 text-[11px] text-[var(--fg-muted)]">{t.untitled}</div>
+            <div className="px-2 py-1.5 text-[length:var(--fs-body)] text-[var(--fg-muted)]">{t.untitled}</div>
           )}
           {notes.map((note) => {
             const isActive = note.id === activeId;
@@ -136,7 +136,7 @@ export function NotePicker({
                     value={draft}
                     placeholder={titleFor(note) || t.untitled}
                     aria-label={t.renameNote}
-                    className="min-w-0 flex-1 bg-transparent px-1 py-0.5 text-[11px] text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)]"
+                    className="min-w-0 flex-1 bg-transparent px-1 py-0.5 text-[length:var(--fs-body)] text-[var(--fg)] outline-none placeholder:text-[var(--fg-muted)]"
                     onChange={(e) => {
                       draftRef.current = e.target.value;
                       setDraft(e.target.value);
@@ -159,7 +159,7 @@ export function NotePicker({
             return (
               <div
                 key={note.id}
-                className={`group flex w-full items-center rounded px-1 text-left text-[11px] ${
+                className={`group flex w-full items-center rounded px-1 text-left text-[length:var(--fs-body)] ${
                   isActive ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]" : "hover:bg-[var(--hover)]"
                 }`}
               >
@@ -174,47 +174,47 @@ export function NotePicker({
                 </button>
                 {isConfirming ? (
                   <span className="flex shrink-0 items-center gap-0.5">
-                    <span className="px-0.5 text-[10px] text-[var(--fg-muted)]">{t.deleteConfirm}</span>
+                    <span className="px-0.5 text-[length:var(--fs-desc)] text-[var(--fg-muted)]">{t.deleteConfirm}</span>
                     <button
                       className="rounded p-0.5 text-[var(--fg)] hover:bg-black/10 dark:hover:bg-white/10"
                       onClick={() => handleDelete(note.id)}
                       title={t.deleteNote}
                     >
-                      <Check size={12} />
+                      <Check size={12} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                     </button>
                     <button
                       className="rounded p-0.5 text-[var(--fg)] hover:bg-black/10 dark:hover:bg-white/10"
                       onClick={() => setConfirmingId(null)}
                       title={t.cancel}
                     >
-                      <X size={12} />
+                      <X size={12} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                     </button>
                   </span>
                 ) : (
                   <span className="flex shrink-0 items-center">
                     <button
-                      className="rounded p-1 text-[var(--fg-muted)] opacity-0 hover:bg-black/10 hover:text-[var(--fg)] group-hover:opacity-100 dark:hover:bg-white/10"
+                      className="rounded p-1 text-current opacity-0 hover:bg-black/10 group-hover:opacity-100 dark:hover:bg-white/10"
                       onClick={() => {
                         setOpen(false);
                         onExportNote(note);
                       }}
                       title={t.exportNote}
                     >
-                      <FileDown size={11} />
+                      <FileDown size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                     </button>
                     <button
-                      className="rounded p-1 text-[var(--fg-muted)] opacity-0 hover:bg-black/10 hover:text-[var(--fg)] group-hover:opacity-100 dark:hover:bg-white/10"
+                      className="rounded p-1 text-current opacity-0 hover:bg-black/10 group-hover:opacity-100 dark:hover:bg-white/10"
                       onClick={() => startRename(note)}
                       title={t.renameNote}
                     >
-                      <Pencil size={11} />
+                      <Pencil size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                     </button>
                     <button
-                      className="rounded p-1 text-[var(--fg-muted)] opacity-0 hover:bg-black/10 hover:text-[var(--fg)] group-hover:opacity-100 dark:hover:bg-white/10"
+                      className="rounded p-1 text-current opacity-0 hover:bg-black/10 group-hover:opacity-100 dark:hover:bg-white/10"
                       onClick={() => setConfirmingId(note.id)}
                       title={t.deleteNote}
                     >
-                      <Trash2 size={11} />
+                      <Trash2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
                     </button>
                   </span>
                 )}
@@ -223,14 +223,14 @@ export function NotePicker({
           })}
           {/* Import .md as a new note (always visible, at the bottom). */}
           <button
-            className="mt-0.5 flex w-full items-center gap-1.5 rounded border-t border-[var(--border)] px-1.5 py-1.5 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            className="mt-0.5 flex w-full items-center gap-1.5 rounded border-t border-[var(--border)] px-1.5 py-1.5 text-[length:var(--fs-body)] text-[var(--fg-muted)] hover:bg-[var(--hover)] hover:text-[var(--fg)]"
             onClick={() => {
               setOpen(false);
               onImportNote();
             }}
             title={t.importMarkdown}
           >
-            <FileUp size={11} />
+            <FileUp size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
             {t.importMarkdown}
           </button>
         </div>
