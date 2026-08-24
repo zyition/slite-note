@@ -86,7 +86,7 @@ jobs:
           Compress-Archive -Path bin\slite-note.exe -DestinationPath "bin\slite-note-${{ github.ref_name }}-windows-amd64.zip"
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows
           path: |
@@ -140,7 +140,7 @@ jobs:
         run: wails3 task darwin:package:universal:dmg VERSION=$VERSION
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos
           path: bin/slite-note.dmg
@@ -160,7 +160,7 @@ jobs:
           tool: git-cliff
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
