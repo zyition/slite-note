@@ -1,3 +1,8 @@
+## [0.8.0] - 2026-08-24
+
+### Features
+
+- *(ui)* Add UI font-size scale, themed accent and refined controls
 ## [0.7.2] - 2026-08-21
 
 ### Bug Fixes
