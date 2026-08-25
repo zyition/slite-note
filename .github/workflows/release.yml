@@ -33,7 +33,7 @@ jobs:
 
       - name: Install wails3 CLI
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12
           echo "$(go env GOPATH)/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Install NSIS
@@ -115,7 +115,7 @@ jobs:
 
       - name: Install wails3 CLI
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Set version from tag
