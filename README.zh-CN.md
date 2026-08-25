@@ -1,4 +1,4 @@
-# slite-note
+# Slite Note
 
 极简桌面便签应用：单窗口承载 BlockNote 块级富文本编辑，本地持久化，窗口支持隐藏/唤起与全局快捷键。随开随记、不打扰。
 
@@ -84,6 +84,17 @@ cd frontend && pnpm dev         # http://localhost:9245
 | 前端 | Vite + React 19 + TypeScript + Tailwind v4 | CSS-first，无 tailwind.config.js |
 | 编辑器 | BlockNote 0.54 | `/` 菜单、拖拽把手、气泡工具栏 |
 | 图标 | lucide-react | |
+
+## 已知问题
+
+- **粘贴代码可能静默丢失内容。** 当粘贴的内容被 BlockNote 误当作
+  Markdown/HTML 解析时 —— 例如含大量 `[`、`]`、`::`、`$` 的代码，或从网页复制的
+  带语法高亮的富文本代码（如 PowerShell 一行式
+  `[Net.Sockets.TcpListener]::new([Net.IPAddress]::Any,9999)`）—— 部分字符会被
+  丢弃。导入含同样内容的 `.md` 也会受影响。
+
+  **临时方案：** 先插入一个 **代码块**（输入 `/` 选择 *Code block*），再粘贴进
+  去 —— 在代码块内 BlockNote 会把剪贴板内容按纯文本原样插入，不会丢失。
 
 ## 参与贡献
 

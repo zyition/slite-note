@@ -1,4 +1,4 @@
-# slite-note
+# Slite Note
 
 A minimal sticky-note desktop app for Windows and macOS. One slim window hosts a
 block-based rich-text editor (BlockNote); notes are stored locally as a single
@@ -96,7 +96,7 @@ cd frontend && pnpm dev         # http://localhost:9245
 
 ## Privacy
 
-slite-note is fully offline. No telemetry, no analytics, no network calls at
+Slite Note is fully offline. No telemetry, no analytics, no network calls at
 runtime. Your notes never leave your machine.
 
 ## Tech stack
@@ -107,6 +107,19 @@ runtime. Your notes never leave your machine.
 | Frontend | Vite + React 19 + TypeScript + Tailwind v4 | CSS-first, no tailwind config |
 | Editor | BlockNote 0.54 | `/` menu, drag handle, bubble toolbar |
 | Icons | lucide-react | |
+
+## Known Issues
+
+- **Pasting code can silently drop content.** When you paste text that
+  BlockNote mis-reads as Markdown/HTML — for example code full of `[`, `]`,
+  `::` or `$`, or syntax-highlighted rich text copied from a web page (like the
+  PowerShell one-liner `[Net.Sockets.TcpListener]::new([Net.IPAddress]::Any,9999)`)
+  — some characters can be lost. Importing a `.md` with the same content is
+  affected too.
+
+  **Workaround:** create a **code block** first (type `/` and pick *Code
+  block*), then paste into it — inside a code block BlockNote inserts the
+  clipboard as plain text verbatim, so nothing is lost.
 
 ## Contributing
 
