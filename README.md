@@ -24,6 +24,9 @@ scratchpad that stays out of your way.
   code blocks, drag-to-reorder, bubble toolbar
 - **Markdown import/export**: export a note as `.md` from the picker, import a
   `.md` as a new note, or export every note from Settings
+- **Paste images**: paste a clipboard screenshot (or use the image entry) into
+  a note — it's saved as a content-addressed file in the data folder and
+  embedded inline; unwanted files can be cleaned from Settings
 - **Auto-save** (800ms debounce) to a single local file
 - **Multiple notes** via the title-bar picker; delete from the note menu
 - **Relocatable data**: move your notes folder from the settings panel

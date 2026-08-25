@@ -157,6 +157,61 @@ export async function currentDataDir(): Promise<string> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Attachments (pasted / uploaded media)                                */
+/* ------------------------------------------------------------------ */
+
+/** Read a File into a data URL (used by the browser fallback and as the base64
+ * source for the native SaveAttachment path). */
+function readAsDataURL(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const r = new FileReader();
+		r.onload = () => resolve(String(r.result));
+		r.onerror = () => reject(r.error);
+		r.readAsDataURL(file);
+	});
+}
+
+/**
+ * Persist a pasted/dropped image (or any media File) and return a URL the
+ * editor can render. In native mode the bytes go to Go's SaveAttachment
+ * (content-addressed blob under attachments/), which returns a relative
+ * "attachments/<hash>.<ext>" reference — the block's props.url stores that,
+ * and resolveAttachmentUrl turns it into an absolute /attachments/… path. In
+ * browser fallback (dev UI without the Go backend) the image is read into a
+ * data URL and embedded inline — not persisted.
+ */
+export async function uploadAttachment(file: File): Promise<string> {
+	if (await isNative()) {
+		const dataUrl = await readAsDataURL(file);
+		const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+		return await Store.SaveAttachment(file.name, file.type, base64);
+	}
+	return readAsDataURL(file);
+}
+
+/**
+ * Resolve a block's stored media reference into a URL the browser can load.
+ * A relative "attachments/<name>" reference becomes an absolute
+ * "/attachments/<name>"; anything else (a remote URL, or a data URL already
+ * in the block) is returned unchanged.
+ */
+export async function resolveAttachmentUrl(url: string): Promise<string> {
+	if (url.startsWith("attachments/")) {
+		return "/" + url;
+	}
+	return url;
+}
+
+/** Remove unreferenced attachment blobs (Settings → "Clean now"); resolves to
+ * the number of files deleted. No-op in browser fallback. */
+export async function cleanOrphanAttachments(): Promise<number> {
+	if (await isNative()) {
+		return await Store.CleanOrphanAttachments();
+	}
+	return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* Markdown import / export                                             */
 /* ------------------------------------------------------------------ */
 

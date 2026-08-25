@@ -2,10 +2,13 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"mime"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,13 +30,14 @@ type Note struct {
 
 // Settings holds app-level preferences persisted across restarts.
 type Settings struct {
-	Theme           string  `json:"theme"`           // "system" | "yellow" | "gray" | "dark"
-	AlwaysOnTop     bool    `json:"alwaysOnTop"`
-	Hotkey          string  `json:"hotkey"`          // global toggle accelerator, e.g. "Alt+Shift+S"
-	LaunchAtStartup bool    `json:"launchAtStartup"` // Windows Run key (HKCU)
-	Opacity         float64 `json:"opacity"`         // window opacity 0.3–1.0, 1 = opaque
-	Language        string  `json:"language"`        // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
-	UiScale         string  `json:"uiScale"`         // "small" | "medium" | "large"; "" = medium (default)
+	Theme                string  `json:"theme"` // "system" | "yellow" | "gray" | "dark"
+	AlwaysOnTop          bool    `json:"alwaysOnTop"`
+	Hotkey               string  `json:"hotkey"`               // global toggle accelerator, e.g. "Alt+Shift+S"
+	LaunchAtStartup      bool    `json:"launchAtStartup"`      // Windows Run key (HKCU)
+	Opacity              float64 `json:"opacity"`              // window opacity 0.3–1.0, 1 = opaque
+	Language             string  `json:"language"`             // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
+	UiScale              string  `json:"uiScale"`              // "small" | "medium" | "large"; "" = medium (default)
+	AutoCleanAttachments bool    `json:"autoCleanAttachments"` // remove orphaned attachments at startup (default off)
 
 	// Window bounds in physical pixels, persisted (debounced) on move/resize
 	// so the window reopens where the user left it. 0 = never saved yet.
@@ -193,7 +197,11 @@ func (s *Store) OpenURL(url string) error { return openURL(url) }
 func (s *Store) LoadNotes() ([]Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadNotesLocked()
+}
 
+// loadNotesLocked reads all notes from disk; the caller must hold s.mu.
+func (s *Store) loadNotesLocked() ([]Note, error) {
 	// New layout: notes/ dir. One corrupt note file is skipped, not fatal.
 	if entries, err := os.ReadDir(s.notesDir()); err == nil {
 		return s.readNotesDir(entries)
@@ -345,6 +353,166 @@ func (s *Store) DeleteNote(id string) error {
 		return fmt.Errorf("delete note: %w", err)
 	}
 	return nil
+}
+
+// attachmentsDir returns the binary-attachment directory inside the data dir.
+func (s *Store) attachmentsDir() string { return filepath.Join(s.dataDir, "attachments") }
+
+// SaveAttachment persists an image/audio/video/file blob as a content-addressed
+// <sha256[:16]>.<ext> file and returns its relative reference
+// ("attachments/<hash>.<ext>"). data is base64. Content-hash dedup means a
+// re-upload of identical bytes returns the existing reference without a second
+// write, and an image shared across notes stays a single file.
+func (s *Store) SaveAttachment(name, mimeType, data string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return "", fmt.Errorf("decode attachment: %w", err)
+	}
+	if len(raw) == 0 {
+		return "", fmt.Errorf("attachment is empty")
+	}
+
+	sum := sha256.Sum256(raw)
+	hash := hex.EncodeToString(sum[:])[:16]
+	ext := attachmentExt(mimeType, name)
+	rel := "attachments/" + hash + ext
+
+	dir := s.attachmentsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create attachments dir: %w", err)
+	}
+	path := filepath.Join(dir, hash+ext)
+	if _, err := os.Stat(path); err == nil {
+		return rel, nil // already present (content-addressed idempotence)
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		return "", fmt.Errorf("write attachment: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return "", fmt.Errorf("rename attachment: %w", err)
+	}
+	return rel, nil
+}
+
+// attachmentExt picks the file extension from the MIME type first, then the
+// original filename's extension, then a MIME reverse-lookup, else ".bin".
+func attachmentExt(mimeType, name string) string {
+	switch strings.ToLower(mimeType) {
+	case "image/png":
+		return ".png"
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "image/svg+xml":
+		return ".svg"
+	case "image/bmp":
+		return ".bmp"
+	case "audio/mpeg":
+		return ".mp3"
+	case "video/mp4":
+		return ".mp4"
+	}
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		return strings.ToLower(name[i:])
+	}
+	if exts, err := mime.ExtensionsByType(mimeType); err == nil && len(exts) > 0 {
+		return exts[0]
+	}
+	return ".bin"
+}
+
+// CleanOrphanAttachments removes attachment blobs not referenced by any note's
+// blocks (Settings → "Clean now"). Returns the number of files deleted.
+func (s *Store) CleanOrphanAttachments() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cleanOrphanAttachmentsLocked()
+}
+
+// cleanOrphanAttachmentsLocked computes the difference between the files in
+// attachments/ and the attachments/* references across every note's blocks,
+// deleting unreferenced files. The caller must hold s.mu. A single-file remove
+// failure is skipped (logged) — a file locked by a sync client or a permission
+// bit must not abort the rest. Because references are read from every note, a
+// blob shared by two notes survives deleting one of them.
+func (s *Store) cleanOrphanAttachmentsLocked() (int, error) {
+	referenced := map[string]bool{}
+	if err := s.collectReferencedAttachments(referenced); err != nil {
+		return 0, err
+	}
+
+	entries, err := os.ReadDir(s.attachmentsDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil // no attachments at all
+		}
+		return 0, fmt.Errorf("read attachments: %w", err)
+	}
+
+	deleted := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if referenced[name] {
+			continue
+		}
+		path := filepath.Join(s.attachmentsDir(), name)
+		if err := os.Remove(path); err != nil {
+			debugLog("slite: skip orphan attachment %s: %v", name, err)
+			continue
+		}
+		debugLog("slite: removed orphan attachment %s", name)
+		deleted++
+	}
+	return deleted, nil
+}
+
+// collectReferencedAttachments walks every note's blocks, recording the
+// basenames of any "attachments/<name>" relative reference found in a block's
+// props.url or props.src. The caller must hold s.mu.
+func (s *Store) collectReferencedAttachments(out map[string]bool) error {
+	notes, err := s.loadNotesLocked()
+	if err != nil {
+		return err
+	}
+	for _, n := range notes {
+		for _, blk := range n.Blocks {
+			collectAttachmentRefs(blk, out, 0)
+		}
+	}
+	return nil
+}
+
+// collectAttachmentRefs is a shallow recursive scan of one block (and its
+// nested content) for attachment references.
+func collectAttachmentRefs(blk map[string]any, out map[string]bool, depth int) {
+	if blk == nil || depth > 8 {
+		return
+	}
+	if props, ok := blk["props"].(map[string]any); ok {
+		for _, key := range []string{"url", "src"} {
+			if v, ok := props[key].(string); ok && strings.HasPrefix(v, "attachments/") {
+				out[filepath.Base(v)] = true
+			}
+		}
+	}
+	if content, ok := blk["content"].([]any); ok {
+		for _, c := range content {
+			if sub, ok := c.(map[string]any); ok {
+				collectAttachmentRefs(sub, out, depth+1)
+			}
+		}
+	}
 }
 
 // LoadSettings reads persisted settings (falling back to defaults).
@@ -516,7 +684,7 @@ func (s *Store) UseDataDir(path string) error {
 // layouts. Returns the artifact names actually copied (for rollback/cleanup).
 func (s *Store) copyDataDirContents(src, dst string) ([]string, error) {
 	var copied []string
-	for _, name := range []string{"settings.json", "notes.json", "notes"} {
+	for _, name := range []string{"settings.json", "notes.json", "notes", "attachments"} {
 		srcPath := filepath.Join(src, name)
 		info, err := os.Stat(srcPath)
 		if err != nil {
@@ -761,6 +929,11 @@ func (s *Store) validateDataDir(path string, forMove bool) error {
 		case "settings.json", "notes.json", "notes.json.tmp", "log.txt":
 			continue
 		case "notes":
+			if !e.IsDir() {
+				return fmt.Errorf("unexpected file %q in directory", e.Name())
+			}
+			continue
+		case "attachments":
 			if !e.IsDir() {
 				return fmt.Errorf("unexpected file %q in directory", e.Name())
 			}

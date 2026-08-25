@@ -5,17 +5,18 @@ import { BlockNoteSchema, defaultBlockSpecs, markdownToBlocks } from "@blocknote
 import { zh } from "@blocknote/core/locales";
 import type { Block, PartialBlock } from "@blocknote/core";
 import { BlockSideMenu } from "./BlockSideMenu";
-import { onShow } from "../services/bridge";
+import { onShow, resolveAttachmentUrl, uploadAttachment } from "../services/bridge";
 import { isMac } from "../services/platform";
 import { useLocale } from "../services/i18n";
 import type { Note } from "../types/note";
 
 /**
- * Sticky notes have no attachment pipeline yet, so the media blocks
- * (image / video / audio / file) are excluded from the schema. Every UI
- * entry point (slash menu, block-type select, …) is generated from the
- * schema, so they disappear everywhere at once — no per-component CSS or
- * menu filtering needed.
+ * The image block is enabled: pasting a clipboard image (or using the image /
+ * slash-menu entry) resolves through the editor's uploadFile callback to a
+ * content-addressed blob under attachments/, referenced relatively and served
+ * by the AssetServer (see services/bridge.ts). The other media blocks (video /
+ * audio / file) stay excluded until they have a pipeline too — they share the
+ * same attachment plumbing, so enabling them later is a one-liner.
  */
 const sliteSchema = BlockNoteSchema.create({
   blockSpecs: {
@@ -29,6 +30,7 @@ const sliteSchema = BlockNoteSchema.create({
     codeBlock: defaultBlockSpecs.codeBlock,
     table: defaultBlockSpecs.table,
     divider: defaultBlockSpecs.divider,
+    image: defaultBlockSpecs.image,
   },
 });
 
@@ -77,6 +79,11 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
     // into a real block when clicked (see index.css for the full-height
     // styling).
     trailingBlock: true,
+    // Clipboard image / image-upload entry resolves through the attachment
+    // pipeline (SaveAttachment → attachments/<hash>.<ext>); resolveFileUrl
+    // turns that relative reference into a loadable /attachments/… path.
+    uploadFile: uploadAttachment,
+    resolveFileUrl: resolveAttachmentUrl,
   });
 
   // Expose the markdown converter to App for export/import. The schema is

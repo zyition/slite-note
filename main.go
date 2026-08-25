@@ -4,9 +4,12 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -73,6 +76,35 @@ func debugLog(format string, args ...any) {
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
+// attachmentMiddleware routes /attachments/* to the data directory instead of
+// the embedded AssetServer. Blocks reference media as the relative path
+// "attachments/<hash>.<ext>"; the frontend resolves that to /attachments/...,
+// so a data-dir migration never forces a rewrite of block content.
+func attachmentMiddleware(store *Store) application.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/attachments/") {
+				serveAttachment(store, w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// serveAttachment writes a single attachment file from the active data
+// directory. Only the final path segment is used (path.Base) so ../ sequences
+// or nested paths can never escape the attachments directory.
+func serveAttachment(store *Store, w http.ResponseWriter, r *http.Request) {
+	name := path.Base(r.URL.Path)
+	if name == "." || name == "" {
+		http.NotFound(w, r)
+		return
+	}
+	file := filepath.Join(store.currentDataDir(), "attachments", name)
+	http.ServeFile(w, r, file)
+}
+
 var (
 	app        *application.App
 	mainWindow *application.WebviewWindow
@@ -104,6 +136,18 @@ func main() {
 
 	store = NewStore()
 
+	// Startup orphan-attachment cleanup: only when enabled in settings. Runs in
+	// a goroutine so it never blocks the first paint, and only touches files
+	// inside attachments/ (the diff against every note's references) — a blob
+	// shared by two notes survives deleting one of them.
+	if store.currentSettings().AutoCleanAttachments {
+		go func() {
+			if n, err := store.CleanOrphanAttachments(); err == nil && n > 0 {
+				debugLog("slite: cleaned %d orphan attachment(s) at startup", n)
+			}
+		}()
+	}
+
 	app = application.New(application.Options{
 		Name:        "slite-note",
 		Description: "A minimal desktop sticky notes app",
@@ -112,6 +156,12 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			// The default handler only serves the embedded frontend. Route
+			// /attachments/* to the data directory so pasted/uploaded media
+			// (referenced as relative "attachments/<hash>.<ext>" in blocks, then
+			// resolved to /attachments/<hash>.<ext> on the frontend) is served
+			// from disk with full Range/Cache support (see attachmentMiddleware).
+			Middleware: attachmentMiddleware(store),
 		},
 		// Single-instance guard: a second launch forwards its argv to the
 		// running instance instead of starting a second process. Two processes

@@ -70,6 +70,18 @@ const en = {
   exportAll: "Export all as Markdown…",
   exportDone: (n: number) => `Exported ${n} note${n === 1 ? "" : "s"} to the selected folder.`,
 
+  // Attachments (settings)
+  attachmentsSection: "Attachments",
+  attachmentsDesc:
+    "Pasted images are stored as files in the data folder. Remove blobs that no note references.",
+  autoCleanAttachments: "Clean up on launch",
+  autoCleanDesc: "Remove unreferenced attachment files when Slite Note starts.",
+  cleanNow: "Clean now",
+  cleanConfirm:
+    "This permanently deletes attachment files that no note references. Undo cannot restore them. Continue?",
+  cleanOrphans: (n: number) => `Removed ${n} unreferenced attachment${n === 1 ? "" : "s"}.`,
+  cleanNoOrphans: "No unreferenced attachments found.",
+
   // Shortcut cheatsheet
   shortcutsTitle: "Keyboard shortcuts",
   shortcutGroupGlobal: "Global",
@@ -169,6 +181,16 @@ const zhCN: typeof en = {
   exportAllDesc: "将每条便签导出为独立 .md 文件到所选文件夹。",
   exportAll: "全部导出为 Markdown…",
   exportDone: (n: number) => `已将 ${n} 条便签导出到所选文件夹。`,
+
+  // Attachments (settings)
+  attachmentsSection: "附件",
+  attachmentsDesc: "粘贴的图片作为文件保存在数据文件夹中。删除不再被任何便签引用的附件。",
+  autoCleanAttachments: "启动时清理",
+  autoCleanDesc: "Slite Note 启动时删除未被引用的附件文件。",
+  cleanNow: "立即清理",
+  cleanConfirm: "这将永久删除不再被任何便签引用的附件文件，撤销无法恢复。继续？",
+  cleanOrphans: (n: number) => `已删除 ${n} 个未引用附件。`,
+  cleanNoOrphans: "未找到未引用的附件。",
 
   shortcutsTitle: "键盘快捷键",
   shortcutGroupGlobal: "全局",

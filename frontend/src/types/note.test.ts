@@ -45,6 +45,7 @@ describe("makeSettings", () => {
       windowY: 0,
       windowWidth: 0,
       windowHeight: 0,
+      autoCleanAttachments: false,
     });
   });
 

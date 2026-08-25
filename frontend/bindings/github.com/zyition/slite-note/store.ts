@@ -34,6 +34,14 @@ export function ChooseDataDir(): $CancellablePromise<string> {
 }
 
 /**
+ * CleanOrphanAttachments removes attachment blobs not referenced by any note's
+ * blocks (Settings → "Clean now"). Returns the number of files deleted.
+ */
+export function CleanOrphanAttachments(): $CancellablePromise<number> {
+    return $Call.ByID(1944367132);
+}
+
+/**
  * CurrentDataDir returns the active data directory path (display in settings).
  */
 export function CurrentDataDir(): $CancellablePromise<string> {
@@ -130,6 +138,17 @@ export function Ping(): $CancellablePromise<string> {
  */
 export function ResumeHotkey(): $CancellablePromise<void> {
     return $Call.ByID(2145843646);
+}
+
+/**
+ * SaveAttachment persists an image/audio/video/file blob as a content-addressed
+ * <sha256[:16]>.<ext> file and returns its relative reference
+ * ("attachments/<hash>.<ext>"). data is base64. Content-hash dedup means a
+ * re-upload of identical bytes returns the existing reference without a second
+ * write, and an image shared across notes stays a single file.
+ */
+export function SaveAttachment(name: string, mimeType: string, data: string): $CancellablePromise<string> {
+    return $Call.ByID(3295260719, name, mimeType, data);
 }
 
 /**

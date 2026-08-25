@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Info, Keyboard, Loader2, Power, Type, X } from "lucide-react";
+import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Image, Info, Keyboard, Loader2, Power, Trash2, Type, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { UI_SCALES, normalizeUiScale, type UiScaleName } from "../types/note";
 import { t } from "../services/i18n";
@@ -7,6 +7,7 @@ import { formatCombo, displayParts } from "../services/hotkey";
 import {
   appVersion,
   chooseDataDir,
+  cleanOrphanAttachments,
   currentDataDir,
   moveDataDir,
   openDataDir,
@@ -54,6 +55,9 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
   const [version, setVersion] = useState("…");
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState<string | null>(null);
+  const [confirmClean, setConfirmClean] = useState(false);
 
   // Tracks whether the toggle hotkey is currently suspended (recording active).
   const suspendedRef = useRef(false);
@@ -65,6 +69,8 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
     setHotkeyError(null);
     setMigrateMsg(null);
     setExportMsg(null);
+    setCleanMsg(null);
+    setConfirmClean(false);
     currentDataDir()
       .then(setDataDirDisplay)
       .catch(() => {});
@@ -204,6 +210,26 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
     }
   }, [onExportAll]);
 
+  // The 「Clean now」 button only opens the in-app confirm dialog — no more
+  // native window.confirm (which breaks the frameless custom UI).
+  const handleCleanOrphans = useCallback(() => setConfirmClean(true), []);
+
+  // Run the actual cleanup once confirmed by the dialog; the result is shown
+  // inline right under the button.
+  const runCleanOrphans = useCallback(async () => {
+    setConfirmClean(false);
+    setCleanMsg(null);
+    setCleaning(true);
+    try {
+      const n = await cleanOrphanAttachments();
+      setCleanMsg(n > 0 ? t.cleanOrphans(n) : t.cleanNoOrphans);
+    } catch (err) {
+      setCleanMsg(String((err as Error)?.message ?? err));
+    } finally {
+      setCleaning(false);
+    }
+  }, []);
+
   if (!open) return null;
 
   // Backwards-compatible opacity: unset (0 / missing) means fully opaque.
@@ -223,6 +249,7 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
     "inline-flex h-[length:var(--btn-h)] shrink-0 items-center justify-center gap-1.5 rounded-md text-[length:var(--fs-body)] font-medium transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:h-[length:var(--icon-sm)] [&_svg]:w-[length:var(--icon-sm)]";
   const primaryBtn = `${btnBase} bg-[var(--accent)] px-3 text-[var(--accent-fg)] shadow-sm hover:opacity-90`;
   const secondaryBtn = `${btnBase} border border-[var(--border)] bg-[var(--bg-input)] px-3 text-[var(--fg)] hover:bg-[var(--hover)]`;
+  const dangerBtn = `${btnBase} bg-red-600 px-3 text-white shadow-sm hover:opacity-90`;
   const iconBtn =
     "inline-flex h-[length:var(--btn-h)] w-[length:var(--btn-h)] shrink-0 items-center justify-center rounded-md text-[var(--fg-muted)] transition-colors duration-150 hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg)] [&_svg]:h-[length:var(--icon-sm)] [&_svg]:w-[length:var(--icon-sm)]";
 
@@ -450,6 +477,49 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
             {exportMsg && <p className="mt-2 text-[length:var(--fs-desc)] text-green-600 dark:text-green-400">{exportMsg}</p>}
           </section>
 
+          {/* Attachments */}
+          <section>
+            <div className={sectionLabel}>
+              <Image size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.attachmentsSection}
+            </div>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.attachmentsDesc}</p>
+            <div className="flex items-center gap-2">
+              <button
+                role="switch"
+                aria-checked={settings.autoCleanAttachments}
+                onClick={() => onChanged({ ...settings, autoCleanAttachments: !settings.autoCleanAttachments })}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                  settings.autoCleanAttachments ? "bg-[var(--accent)]" : "bg-[var(--border)]"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                    settings.autoCleanAttachments ? "left-[18px]" : "left-0.5"
+                  }`}
+                />
+              </button>
+              <span className="text-[length:var(--fs-body)]">{t.autoCleanAttachments}</span>
+            </div>
+            <p className="mt-1 text-[length:var(--fs-tiny)] leading-snug text-[var(--fg-muted)]">{t.autoCleanDesc}</p>
+            <div className="mt-2">
+              <button
+                className={secondaryBtn}
+                onClick={handleCleanOrphans}
+                disabled={cleaning}
+              >
+                {cleaning ? (
+                  <Loader2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)] animate-spin" />
+                ) : (
+                  <Trash2 size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" />
+                )}
+                {t.cleanNow}
+              </button>
+            </div>
+            {cleanMsg && (
+              <p className="mt-2 text-[length:var(--fs-desc)] text-green-600 dark:text-green-400">{cleanMsg}</p>
+            )}
+          </section>
+
           {/* About */}
           <section>
             <div className={sectionLabel}>
@@ -486,6 +556,32 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
           </section>
         </div>
       </div>
+
+      {confirmClean && (
+        <div
+          className="fixed inset-0 z-[104] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setConfirmClean(false);
+          }}
+        >
+          <div
+            className="w-full max-w-72 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 shadow-2xl"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={t.cleanConfirm}
+          >
+            <p className="text-[length:var(--fs-body)] leading-snug">{t.cleanConfirm}</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button className={secondaryBtn} onClick={() => setConfirmClean(false)}>
+                {t.cancel}
+              </button>
+              <button className={dangerBtn} onClick={() => void runCleanOrphans()}>
+                {t.cleanNow}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

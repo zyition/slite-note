@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -619,5 +620,143 @@ func TestAppVersionDefault(t *testing.T) {
 	// "0.2.0" while releases had moved on).
 	if appVersion != "dev" {
 		t.Fatalf("default appVersion = %q, want %q (release builds inject via ldflags)", appVersion, "dev")
+	}
+}
+
+// --- attachments ---
+
+func b64(data []byte) string { return base64.StdEncoding.EncodeToString(data) }
+
+func TestSaveAttachmentDedup(t *testing.T) {
+	s := newTestStore(t)
+	img := []byte("fake-png-bytes")
+	ref1, err := s.SaveAttachment("x.png", "image/png", b64(img))
+	if err != nil {
+		t.Fatalf("SaveAttachment: %v", err)
+	}
+	ref2, err := s.SaveAttachment("y.png", "image/png", b64(img))
+	if err != nil {
+		t.Fatalf("SaveAttachment dup: %v", err)
+	}
+	if ref1 != ref2 {
+		t.Fatalf("content-hash dedup: refs differ: %q vs %q", ref1, ref2)
+	}
+	if !strings.HasPrefix(ref1, "attachments/") {
+		t.Fatalf("ref should be a relative attachments/ path: %q", ref1)
+	}
+	entries, err := os.ReadDir(filepath.Join(s.dataDir, "attachments"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 attachment file, got %d (err %v)", len(entries), err)
+	}
+	// Empty data is rejected.
+	if _, err := s.SaveAttachment("x.png", "image/png", b64(nil)); err == nil {
+		t.Fatal("empty attachment must fail")
+	}
+}
+
+func TestCleanOrphanAttachments(t *testing.T) {
+	s := newTestStore(t)
+	ref, err := s.SaveAttachment("photo.png", "image/png", b64([]byte("image-bytes-123")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A second, unreferenced attachment.
+	if _, err := s.SaveAttachment("orphan.png", "image/png", b64([]byte("other-bytes"))); err != nil {
+		t.Fatal(err)
+	}
+	// A note that references the first attachment.
+	note := Note{
+		ID:        "n1",
+		Blocks:    []map[string]any{{"id": "b1", "type": "image", "props": map[string]any{"url": ref}}},
+		CreatedAt: 1, UpdatedAt: 1,
+	}
+	if err := s.SaveNote(note); err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := s.CleanOrphanAttachments()
+	if err != nil {
+		t.Fatalf("CleanOrphanAttachments: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("expected 1 orphan deleted, got %d", deleted)
+	}
+	// The referenced blob survives, the orphan is gone.
+	if _, err := os.Stat(filepath.Join(s.dataDir, "attachments", filepath.Base(ref))); err != nil {
+		t.Fatalf("referenced attachment should survive: %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(s.dataDir, "attachments"))
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 remaining attachment, got %d", len(entries))
+	}
+}
+
+func TestCleanOrphanAttachmentsSharedAcrossNotes(t *testing.T) {
+	s := newTestStore(t)
+	ref, err := s.SaveAttachment("shared.png", "image/png", b64([]byte("shared-image")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range []string{"a", "b"} {
+		if err := s.SaveNote(Note{
+			ID: id, CreatedAt: int64(i), UpdatedAt: int64(i),
+			Blocks: []map[string]any{{"id": "b" + id, "type": "image", "props": map[string]any{"url": ref}}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Delete one note: the shared blob must still be referenced by the other.
+	if err := s.DeleteNote("a"); err != nil {
+		t.Fatal(err)
+	}
+	deleted, err := s.CleanOrphanAttachments()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 0 {
+		t.Fatalf("shared attachment must not be removed, deleted=%d", deleted)
+	}
+}
+
+func TestMoveDataDirIncludesAttachments(t *testing.T) {
+	base := t.TempDir()
+	defaultDir := filepath.Join(base, "default")
+	customDir := filepath.Join(base, "custom")
+	for _, d := range []string{defaultDir, customDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &Store{dataDir: defaultDir, defaultDir: defaultDir, settings: Settings{Theme: "system", Hotkey: defaultHotkey}}
+	ref, err := s.SaveAttachment("pic.png", "image/png", b64([]byte("payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveDataDir(customDir); err != nil {
+		t.Fatalf("MoveDataDir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(customDir, "attachments", filepath.Base(ref))); err != nil {
+		t.Fatalf("attachment not carried to new dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(defaultDir, "attachments")); !os.IsNotExist(err) {
+		t.Fatalf("old attachments dir should be removed, err=%v", err)
+	}
+}
+
+func TestAttachmentExt(t *testing.T) {
+	cases := map[string]string{
+		"image/png":     ".png",
+		"image/jpeg":    ".jpg",
+		"image/gif":     ".gif",
+		"image/webp":    ".webp",
+		"image/svg+xml": ".svg",
+	}
+	for mime, want := range cases {
+		if got := attachmentExt(mime, "x"); got != want {
+			t.Fatalf("attachmentExt(%q) = %q, want %q", mime, got, want)
+		}
+	}
+	if got := attachmentExt("", "photo.JPG"); got != ".jpg" {
+		t.Fatalf("attachmentExt('', name) = %q, want .jpg", got)
 	}
 }

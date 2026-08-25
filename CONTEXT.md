@@ -63,6 +63,18 @@ _Avoid_: storage（与浏览器 localStorage 混淆）, 存储
 Note 与 Settings 的存储目录（默认 Windows `%APPDATA%\slite` / macOS `~/Library/Application Support/slite`），可在设置页通过 "Change location…" 迁移。
 _Avoid_: data dir（作为领域词，裸词）, 数据文件夹
 
+**Attachment**:
+粘贴/上传的媒体（当前为图片）保存为数据目录 `attachments/` 下按内容哈希命名的不可变文件；块内以相对引用 `attachments/<hash>.<ext>` 存储，渲染时经 AssetServer（`/attachments/…`）加载。
+_Avoid_: 图片文件（作为裸词）, embed file
+
+**Auto-clean Attachments**:
+启动时自动删除未被任何 Note 引用的附件文件的设置（默认关闭，设置页可切换；关闭时仍会在启动时计算孤儿，只记录不删除）。
+_Avoid_: 自动清理附件（作为动词短语）, GC
+
+**Orphan Attachment**:
+未被任何 Note 的 blocks 引用的附件文件；Auto-clean 与手动「Clean now」的清理目标，按「附件目录文件集 − 所有 Note 引用集」差集计算。
+_Avoid_: 无用附件, 残留文件
+
 **Vault**:
 （未来能力）可配置数据目录、每 Note 一个文件的存储形态，类似 Obsidian vault。
 _Avoid_: 仓库, data dir（作为领域词）

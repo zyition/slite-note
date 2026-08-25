@@ -78,6 +78,7 @@ export function makeSettings(partial?: Partial<Settings>): Settings {
     windowY: 0,
     windowWidth: 0,
     windowHeight: 0,
+    autoCleanAttachments: false,
     ...partial,
   };
 }
