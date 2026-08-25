@@ -1,3 +1,12 @@
+## [0.8.1] - 2026-08-25
+
+### Bug Fixes
+
+- *(ci)* Bump upload/download-artifact to Node 24 majors
+
+### Documentation
+
+- Document pasted-code loss and standardise app name
 ## [0.8.0] - 2026-08-24
 
 ### Features
