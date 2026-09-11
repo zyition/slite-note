@@ -10,6 +10,18 @@ import {
   SideMenuController,
   SuggestionMenuController,
   getDefaultReactSlashMenuItems,
+  BasicTextStyleButton,
+  BlockTypeSelect,
+  ColorStyleButton,
+  CreateLinkButton,
+  FileDeleteButton,
+  FilePreviewButton,
+  FormattingToolbar,
+  FormattingToolbarController,
+  NestBlockButton,
+  TextAlignButton,
+  TableCellMergeButton,
+  UnnestBlockButton,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { BlockNoteSchema, defaultBlockSpecs, markdownToBlocks } from "@blocknote/core";
@@ -187,6 +199,39 @@ export interface NoteConverter {
  * the document — the note cannot change while the window is away, so the
  * stored position stays valid.
  */
+/**
+ * The default formatting toolbar minus the file buttons that do not fit a
+ * sticky note: replace (it re-opens the file panel we disabled via
+ * filePanel={false} — an image only ever arrives by paste or drop here),
+ * caption/rename, and download (it runs a fetch+save flow the desktop
+ * webview has no download host for and just spills a data: URL). Delete
+ * stays: it removes the block exactly like Backspace, and the resulting
+ * orphaned attachment file is the GC's job (CleanOrphanAttachments). All
+ * remaining buttons mirror getFormattingToolbarItems (order included);
+ * buttons that do not apply to the selected block hide themselves.
+ */
+function SliteFormattingToolbar() {
+  return (
+    <FormattingToolbar>
+      <BlockTypeSelect />
+      <TableCellMergeButton />
+      <FileDeleteButton />
+      <FilePreviewButton />
+      <BasicTextStyleButton basicTextStyle="bold" />
+      <BasicTextStyleButton basicTextStyle="italic" />
+      <BasicTextStyleButton basicTextStyle="underline" />
+      <BasicTextStyleButton basicTextStyle="strike" />
+      <TextAlignButton textAlignment="left" />
+      <TextAlignButton textAlignment="center" />
+      <TextAlignButton textAlignment="right" />
+      <ColorStyleButton />
+      <NestBlockButton />
+      <UnnestBlockButton />
+      <CreateLinkButton />
+    </FormattingToolbar>
+  );
+}
+
 export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: EditorProps) {
   const locale = useLocale();
   // Only the failure path of `uploadFile` below needs this: BlockNote hands a
@@ -582,6 +627,9 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
         }}
         sideMenu={false}
         linkToolbar={false}
+        // The default controller is replaced by a child one below: image
+        // blocks must get no bar at all (see SliteFormattingToolbar).
+        formattingToolbar={false}
         // No file panel and no slash-menu image entry: an image only ever arrives
         // by paste or drop here. BlockNote's panel offers an upload/embed tab
         // pair that does not fit a sticky note, and leaving it disabled without
@@ -592,6 +640,9 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
         data-testid="slite-editor"
       >
         <SideMenuController sideMenu={BlockSideMenu} />
+        {/* Replaces the default formatting toolbar so image blocks get no
+            hover bar at all (see SliteFormattingToolbar). */}
+        <FormattingToolbarController formattingToolbar={SliteFormattingToolbar} />
         {/* Replaces the default link toolbar so a hovered link offers copying
             its text or its URL (see components/EditorLinkToolbar.tsx). */}
         <LinkToolbarController linkToolbar={SliteLinkToolbar} />
