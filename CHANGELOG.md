@@ -1,3 +1,17 @@
+## [0.9.0] - 2026-09-11
+
+### Features
+
+- Paste images into notes as local file attachments
+- *(editor)* Paste, drop and copy images without BlockNote's file panel
+- *(ui)* Remember the open note across restarts (device-local)
+- *(editor)* Style links so they read as links
+- *(editor)* Paste a bare URL as a self-link
+- *(editor)* Add copy link and copy text to the link toolbar
+
+### Bug Fixes
+
+- *(editor)* Open links in the system browser, not a new WebView
 ## [0.8.1] - 2026-08-25
 
 ### Bug Fixes
