@@ -139,13 +139,20 @@ export async function appVersion(): Promise<string> {
   return "dev";
 }
 
+/** The browser's own `window.open`, captured up front because
+ * services/externalLinks.ts replaces the global with `openUrl` — going through
+ * the global here would recurse in the browser fallback. Null outside a DOM
+ * (vitest runs bridge.ts in node), where nothing can call this anyway. */
+const browserOpen: typeof window.open | null =
+  typeof window === "undefined" ? null : window.open.bind(window);
+
 /** Open a URL in the default browser (native) or a new tab (fallback). */
 export async function openUrl(url: string): Promise<void> {
   if (await isNative()) {
     await Store.OpenURL(url);
     return;
   }
-  window.open(url, "_blank", "noopener");
+  browserOpen?.(url, "_blank", "noopener");
 }
 
 /** Active data directory path (native); a friendly label in fallback mode. */
