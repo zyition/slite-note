@@ -6,6 +6,7 @@ import type {
 } from "react";
 import {
   useCreateBlockNote,
+  LinkToolbarController,
   SideMenuController,
   SuggestionMenuController,
   getDefaultReactSlashMenuItems,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import { BlockSideMenu } from "./BlockSideMenu";
 import { EditorContextMenu } from "./EditorContextMenu";
+import { SliteLinkToolbar } from "./EditorLinkToolbar";
 import type { EditorMenuEntry } from "./EditorContextMenu";
 import { onShow, resolveAttachmentUrl, uploadAttachment } from "../services/bridge";
 import {
@@ -555,6 +557,7 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
           onChange(editor.document);
         }}
         sideMenu={false}
+        linkToolbar={false}
         // No file panel and no slash-menu image entry: an image only ever arrives
         // by paste or drop here. BlockNote's panel offers an upload/embed tab
         // pair that does not fit a sticky note, and leaving it disabled without
@@ -565,6 +568,9 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
         data-testid="slite-editor"
       >
         <SideMenuController sideMenu={BlockSideMenu} />
+        {/* Replaces the default link toolbar so a hovered link offers copying
+            its text or its URL (see components/EditorLinkToolbar.tsx). */}
+        <LinkToolbarController linkToolbar={SliteLinkToolbar} />
         <SuggestionMenuController
           triggerCharacter="/"
           shouldOpen={(state) =>

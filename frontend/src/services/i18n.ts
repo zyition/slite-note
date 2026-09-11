@@ -32,6 +32,10 @@ const en = {
   menuCopyImage: "Copy image",
   menuDeleteBlock: "Delete block",
 
+  // Link toolbar (see components/EditorLinkToolbar.tsx)
+  linkCopyLink: "Copy link",
+  linkCopyText: "Copy text",
+
   // Note picker: delete / rename
   deleteNote: "Delete note",
   deleteConfirm: "Delete?",
@@ -157,6 +161,9 @@ const zhCN: typeof en = {
   menuSelectAll: "全选",
   menuCopyImage: "复制图片",
   menuDeleteBlock: "删除块",
+
+  linkCopyLink: "复制链接",
+  linkCopyText: "复制文本",
 
   deleteNote: "删除便签",
   deleteConfirm: "删除？",
