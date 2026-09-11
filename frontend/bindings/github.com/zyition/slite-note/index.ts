@@ -7,6 +7,7 @@ export {
 };
 
 export type {
+    DroppedImage,
     MarkdownFile,
     Note,
     Settings

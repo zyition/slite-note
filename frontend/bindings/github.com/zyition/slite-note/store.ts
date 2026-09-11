@@ -69,6 +69,15 @@ export function ExportAllMarkdown(files: $models.MarkdownFile[] | null): $Cancel
 }
 
 /**
+ * LoadDroppedImages returns the bytes of the image files recorded for the
+ * most recent native drop gesture. Resolves to an empty slice when the last
+ * gesture carried no images (or there has not been one yet).
+ */
+export function LoadDroppedImages(): $CancellablePromise<$models.DroppedImage[] | null> {
+    return $Call.ByID(364644897);
+}
+
+/**
  * LoadNotes reads all notes from disk (per-note files under notes/), sorting
  * by CreatedAt so the list order is stable regardless of directory order. On
  * the first read after an upgrade it migrates the legacy single-file

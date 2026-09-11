@@ -5,9 +5,14 @@
 // @ts-ignore: Unused imports
 import type { Events } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as main$0 from "../../../../zyition/slite-note/models.js";
+
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "app:files-dropped": main$0.droppedFilesEvent;
             "app:hide": string;
             "app:open-settings": string;
             "app:quit": string;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  filesFromDroppedImages,
   insertImageFiles,
   pasteUrlAsLink,
   selectedImageUrl,
@@ -60,6 +61,27 @@ const collapsed = (block: FakeNode) => ({
 const image = node("image", { url: "attachments/abc123.png" });
 const imageContainer = node("blockContainer", { id: "b1" }, image);
 const paragraph = node("paragraph", { id: "b2" }, node("text"));
+
+describe("filesFromDroppedImages", () => {
+  it("decodes the bridge payloads back into named, typed files", async () => {
+    const png = "iVBORw0KGgo="; // base64 of the PNG magic bytes
+    const [file] = filesFromDroppedImages([
+      { name: "shot.png", mimeType: "image/png", base64: png },
+    ]);
+    expect(file.name).toBe("shot.png");
+    expect(file.type).toBe("image/png");
+    expect(Array.from(new Uint8Array(await file.arrayBuffer())))
+      .toEqual(Array.from(atob(png), (ch) => ch.charCodeAt(0)));
+  });
+
+  it("keeps every image of the gesture, in order", () => {
+    const files = filesFromDroppedImages([
+      { name: "a.png", mimeType: "image/png", base64: "" },
+      { name: "b.jpg", mimeType: "image/jpeg", base64: "" },
+    ]);
+    expect(files.map((f) => f.name)).toEqual(["a.png", "b.jpg"]);
+  });
+});
 
 describe("selectedImageUrl", () => {
   it("reads the image of a node-selected image block", () => {

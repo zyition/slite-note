@@ -29,11 +29,18 @@ import { BlockSideMenu } from "./BlockSideMenu";
 import { EditorContextMenu } from "./EditorContextMenu";
 import { SliteLinkToolbar } from "./EditorLinkToolbar";
 import type { EditorMenuEntry } from "./EditorContextMenu";
-import { onShow, resolveAttachmentUrl, uploadAttachment } from "../services/bridge";
+import {
+  loadDroppedImages,
+  onFilesDropped,
+  onShow,
+  resolveAttachmentUrl,
+  uploadAttachment,
+} from "../services/bridge";
 import {
   applyPendingImageUrls,
   canReadPixels,
   copyImageToClipboard,
+  filesFromDroppedImages,
   imageFilesFrom,
   insertImageFiles,
   pasteFromClipboard,
@@ -282,6 +289,23 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
   useEffect(() => {
     return onShow(placeCaret);
   }, [placeCaret]);
+
+  // macOS: file drops are intercepted natively (EnableFileDrop in main.go), so
+  // the DOM drop handler above never sees them there — the Go side records the
+  // dropped files and reports the release point instead. Fetch the images and
+  // take the same insert-then-fill path. Windows never fires this event (its
+  // DOM drop has already inserted the picture) and the browser fallback has no
+  // native drop, so no platform check is needed here.
+  useEffect(() => {
+    return onFilesDropped(async ({ x, y }) => {
+      const files = filesFromDroppedImages(await loadDroppedImages());
+      if (!files.length) return;
+      const hit = dropPlacementAt(x, y);
+      void insertImageFiles(editor, files, hit ?? undefined).catch((err) =>
+        console.error("slite: inserting the dropped image failed", err),
+      );
+    });
+  }, [editor]);
 
   // Alt-tab away/back: remember the caret on blur, restore it on refocus.
   // Hiding the window also blurs it, so the summon path above reuses the

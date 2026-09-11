@@ -8,7 +8,11 @@
  */
 import { Events, Window as WailsWindow } from "@wailsio/runtime";
 import { Store } from "../../bindings/github.com/zyition/slite-note";
-import type { Note, Settings } from "../../bindings/github.com/zyition/slite-note";
+import type {
+  Note,
+  Settings,
+  DroppedImage,
+} from "../../bindings/github.com/zyition/slite-note";
 import { makeSettings } from "../types/note";
 import { t } from "./i18n";
 
@@ -387,4 +391,28 @@ export function onQuit(callback: () => void): void {
 
 export function onOpenSettings(callback: () => void): void {
   if (native) Events.On("app:open-settings", callback);
+}
+
+/** A native file drop landed at (x, y) — CSS px in the window's content area,
+ * the same space DOM drag events report. macOS only: on Windows the DOM drop
+ * handler in the editor has already inserted the picture by the time this
+ * would fire, so the Go side never emits it there. Returns the off function
+ * so a per-note editor can detach on unmount. */
+export function onFilesDropped(
+  callback: (point: { x: number; y: number }) => void,
+): () => void {
+  if (!native) return () => {};
+  return Events.On("app:files-dropped", (event) => {
+    callback(event.data);
+  });
+}
+
+/** The image files of the most recent native (macOS) file drop, as bytes.
+ * Empty when the last drop carried no images (or there has not been one yet).
+ * No-op (empty) in the browser fallback. */
+export async function loadDroppedImages(): Promise<DroppedImage[]> {
+  if (await isNative()) {
+    return (await Store.LoadDroppedImages()) ?? [];
+  }
+  return [];
 }

@@ -35,6 +35,7 @@ import type {
   BlockNoteEditor,
   PartialBlock,
 } from "@blocknote/core";
+import type { DroppedImage } from "../../bindings/github.com/zyition/slite-note";
 
 /** Any BlockNote editor instance (the schema is the caller's business). */
 type Editor = BlockNoteEditor<any, any, any>;
@@ -285,6 +286,16 @@ export function imageFilesFrom(data: DataTransfer | null): File[] {
   return Array.from(data?.files ?? []).filter((file) =>
     file.type.startsWith("image/"),
   );
+}
+
+/** The images of one native (macOS) drop as File objects, ready for the same
+ * insert path as a DOM drop (insertImageFiles). The bytes travel base64 over
+ * the bridge (LoadDroppedImages), so they are decoded back here. */
+export function filesFromDroppedImages(images: DroppedImage[]): File[] {
+  return images.map((image) => {
+    const bytes = Uint8Array.from(atob(image.base64), (ch) => ch.charCodeAt(0));
+    return new File([bytes], image.name, { type: image.mimeType });
+  });
 }
 
 /** Upload one image through the editor's pipeline: Go's SaveAttachment in
