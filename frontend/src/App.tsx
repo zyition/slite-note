@@ -28,6 +28,13 @@ import {
 
 const SAVE_DEBOUNCE_MS = 800;
 
+// Device-local UI state: the note that was open when the app last ran.
+// Deliberately kept in localStorage (not settings.json): it is per-device
+// state with no sync value, and the webview profile is device-scoped by
+// construction. Best-effort only — a cleared/missing entry falls back to
+// the last note in the list.
+const LAST_NOTE_KEY = "slite:lastNoteId";
+
 export default function App() {
   const [ready, setReady] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -95,13 +102,29 @@ export default function App() {
       // Resolve the UI language once at startup: follow the OS unless the
       // user previously picked a concrete locale (see resolveChoice).
       setLocale(resolveChoice(baseSettings.language));
-      setActiveId(list[list.length - 1]?.id ?? null);
+      // Restore the note that was open on this device last run; if it was
+      // deleted since, fall back to the last note in the list.
+      const savedId = localStorage.getItem(LAST_NOTE_KEY);
+      const restored = savedId ? list.find((n) => n.id === savedId) : undefined;
+      setActiveId(restored?.id ?? list[list.length - 1]?.id ?? null);
       setReady(true);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Record the open note for next launch (device-local, see LAST_NOTE_KEY).
+  // One effect covers every path that changes activeId: picker, shortcuts,
+  // create, delete fallback and the boot restore itself (idempotent).
+  useEffect(() => {
+    if (!ready || !activeId) return;
+    try {
+      localStorage.setItem(LAST_NOTE_KEY, activeId);
+    } catch {
+      // Storage unavailable (private mode, profile issues): best-effort only.
+    }
+  }, [ready, activeId]);
 
   /* ---------------- language ---------------- */
 
