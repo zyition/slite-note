@@ -36,7 +36,9 @@ import {
   insertImageFiles,
   pasteFromClipboard,
   pastePlainText,
+  pasteUrlAsLink,
   selectedImageUrl,
+  urlOnlyFrom,
 } from "../services/clipboard";
 import { hasPrimaryModifier, SHORTCUT_MODIFIER } from "../services/platform";
 import { t, useLocale } from "../services/i18n";
@@ -219,11 +221,22 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
     // BlockNote's default handler untouched.
     pasteHandler: ({ event, editor: instance, defaultPasteHandler }) => {
       const files = imageFilesFrom(event.clipboardData);
-      if (!files.length) return defaultPasteHandler();
-      void insertImageFiles(instance, files).catch((err) =>
-        console.error("slite: pasting the image failed", err),
-      );
-      return true;
+      if (files.length) {
+        void insertImageFiles(instance, files).catch((err) =>
+          console.error("slite: pasting the image failed", err),
+        );
+        return true;
+      }
+      // A clipboard holding exactly one URL pastes as a link whose text is the
+      // URL itself (see services/clipboard.ts). A payload with an HTML flavour
+      // keeps BlockNote's own handling, and with text selected its "turn the
+      // selection into a link" rule still applies — so fall through both times.
+      const url = urlOnlyFrom(event.clipboardData);
+      if (url && instance._tiptapEditor.state.selection.empty) {
+        pasteUrlAsLink(instance, url);
+        return true;
+      }
+      return defaultPasteHandler();
     },
   });
   editorRef.current = editor;

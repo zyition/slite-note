@@ -20,6 +20,14 @@
  * paste event cannot be synthesized — so the menu reads the clipboard through
  * the async Clipboard API and drives the same BlockNote entry points the
  * built-in paste handler uses (`pasteHTML` / `pasteMarkdown` / `pasteText`).
+ *
+ * URLs. A clipboard that is exactly one absolute URL pastes as a link whose
+ * text is the URL itself (`[url](url)`). Only a text-only clipboard is taken
+ * over: when the payload also carries `text/html` (a hyperlink copied from a
+ * browser), BlockNote's own HTML handling keeps the anchor's label, which is
+ * the user's business until HTML-fragment pasting gets its own treatment.
+ * Nothing fetches the URL either (no page title / favicon): this app
+ * deliberately has no link-preview feature.
  */
 
 import type {
@@ -167,6 +175,88 @@ async function readTextClipboard(): Promise<string> {
   }
 }
 
+/**
+ * A clipboard whose text is exactly one absolute URL and nothing else.
+ * Deliberately strict: only an explicit scheme counts, and any whitespace in
+ * the text disqualifies it (a sentence that happens to contain a URL is not a
+ * URL-only clipboard). `www.example.com` without a scheme is left to
+ * BlockNote's own autolink, which adds the missing protocol itself.
+ */
+const ABSOLUTE_URL = /^(?:https?|ftps?|mailto|tel):\S+$/i;
+
+function urlOnlyIn(text: string): string | null {
+  const trimmed = text.trim();
+  return ABSOLUTE_URL.test(trimmed) ? trimmed : null;
+}
+
+/** The pasted URL when the clipboard is exactly one URL, else null. A payload
+ * with a `text/html` flavour is deliberately left to BlockNote: an anchor's
+ * label is preserved there (see the URLs note above). */
+export function urlOnlyFrom(data: DataTransfer | null): string | null {
+  if (!data || data.types.includes("text/html")) return null;
+  return urlOnlyIn(data.getData("text/plain"));
+}
+
+/** `&`/`"`/`<`/`>` for an attribute and `&`/`<`/`>` for text content. */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Fold a clipboard write into a boolean: the native WebView always has the
+ * async Clipboard API, but the browser fallback is served over plain http,
+ * where `navigator.clipboard` does not exist at all (secure-context only).
+ * There the old `execCommand("copy")` on a throwaway textarea still works.
+ * Resolves to false when nothing could be written. */
+export async function writeClipboardText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) {
+    console.error("slite: writing to the clipboard failed", err);
+  }
+
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const written = document.execCommand("copy");
+    document.body.removeChild(area);
+    return written;
+  } catch (err) {
+    console.error("slite: copying the text failed", err);
+    return false;
+  }
+}
+
+/**
+ * Paste `url` as a link whose text is the URL itself — `[url](url)` in
+ * markdown terms. Goes through `pasteHTML` like BlockNote's own paste paths,
+ * so the link mark parses exactly as it does for a copied hyperlink. The
+ * caller must leave a non-empty selection to the default handler: there
+ * BlockNote applies a link mark to the selected text instead
+ * (see handlePasteLink in @blocknote/core).
+ */
+export function pasteUrlAsLink(editor: Editor, url: string) {
+  editor.pasteHTML(
+    `<p><a href="${escapeAttribute(url)}">${escapeText(url)}</a></p>`,
+  );
+}
+
 /** The first image on the clipboard as a File, or null. */
 async function clipboardImage(items: ClipboardItems): Promise<File | null> {
   for (const item of items) {
@@ -177,6 +267,16 @@ async function clipboardImage(items: ClipboardItems): Promise<File | null> {
     return new File([blob], `pasted.${extension}`, { type: blob.type });
   }
   return null;
+}
+
+/** The plain text on the clipboard, through the item list if it carries one
+ * and the simpler API otherwise. Never throws (see readTextClipboard). */
+async function clipboardText(items: ClipboardItems): Promise<string> {
+  for (const item of items) {
+    if (!item.types.includes("text/plain")) continue;
+    return await (await item.getType("text/plain")).text();
+  }
+  return readTextClipboard();
 }
 
 /** The image files in a paste/drop payload. Non-images are left to BlockNote:
@@ -333,6 +433,18 @@ export async function pasteFromClipboard(editor: Editor): Promise<boolean> {
 
   const file = await clipboardImage(items);
   if (file) return insertImageFiles(editor, [file]);
+
+  // A URL-only clipboard (and an empty selection) pastes as a self-link. A
+  // payload with an HTML flavour is left to BlockNote (see urlOnlyFrom), and
+  // with text selected its "link the selection" rule wins — so fall through in
+  // both cases.
+  const url = items.some((item) => item.types.includes("text/html"))
+    ? null
+    : urlOnlyIn(await clipboardText(items));
+  if (url && editor._tiptapEditor.state.selection.empty) {
+    pasteUrlAsLink(editor, url);
+    return true;
+  }
 
   for (const item of items) {
     if (!item.types.includes("text/html")) continue;

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { insertImageFiles, selectedImageUrl } from "./clipboard";
+import {
+  insertImageFiles,
+  pasteUrlAsLink,
+  selectedImageUrl,
+  urlOnlyFrom,
+} from "./clipboard";
 
 /*
  * `selectedImageUrl` is the lookup the copy interceptor and the right-click
@@ -92,6 +97,77 @@ describe("selectedImageUrl", () => {
 
   it("ignores an image block without a URL", () => {
     expect(selectedImageUrl(editorWith(nodeSelection(node("image"))))).toBeNull();
+  });
+});
+
+/*
+ * A URL-only clipboard is pasted as a self-link, not with a copied
+ * hyperlink's anchor label (see the URLs note in clipboard.ts). These cases pin
+ * down what counts as "exactly one URL" and the escaping of the anchor that is
+ * built from it.
+ */
+describe("urlOnlyFrom", () => {
+  const clipboard = (text: string, types: string[] = ["text/plain"]) =>
+    ({ getData: () => text, types }) as unknown as DataTransfer;
+
+  it("reads a lone URL, ignoring surrounding whitespace", () => {
+    expect(urlOnlyFrom(clipboard("  https://baidu.com\n"))).toBe(
+      "https://baidu.com",
+    );
+    expect(urlOnlyFrom(clipboard("mailto:hi@example.com"))).toBe(
+      "mailto:hi@example.com",
+    );
+  });
+
+  it("ignores an empty clipboard", () => {
+    expect(urlOnlyFrom(clipboard("   "))).toBeNull();
+    expect(urlOnlyFrom(null)).toBeNull();
+  });
+
+  it("ignores text that merely contains a URL", () => {
+    expect(
+      urlOnlyFrom(clipboard("see https://baidu.com for details")),
+    ).toBeNull();
+  });
+
+  it("ignores a URL without a scheme (BlockNote autolinks those itself)", () => {
+    expect(urlOnlyFrom(clipboard("www.baidu.com"))).toBeNull();
+    expect(urlOnlyFrom(clipboard("baidu.com/path"))).toBeNull();
+  });
+
+  it("ignores a clipboard that also carries HTML", () => {
+    // A copied hyperlink keeps BlockNote's own HTML handling (and the anchor's
+    // label) — only a text-only clipboard is taken over.
+    expect(
+      urlOnlyFrom(clipboard("https://baidu.com", ["text/plain", "text/html"])),
+    ).toBeNull();
+  });
+});
+
+describe("pasteUrlAsLink", () => {
+  function fakeEditor() {
+    const pasted: string[] = [];
+    return {
+      editor: { pasteHTML: (html: string) => pasted.push(html) } as never,
+      pasted,
+    };
+  }
+
+  it("pastes a link whose text is the URL itself", () => {
+    const { editor, pasted } = fakeEditor();
+    pasteUrlAsLink(editor, "https://baidu.com");
+    expect(pasted).toEqual([
+      '<p><a href="https://baidu.com">https://baidu.com</a></p>',
+    ]);
+  });
+
+  it("escapes the URL so it cannot break out of the anchor", () => {
+    const { editor, pasted } = fakeEditor();
+    pasteUrlAsLink(editor, 'https://x.test/?a=1&b="<>"');
+    expect(pasted).toEqual([
+      '<p><a href="https://x.test/?a=1&amp;b=&quot;&lt;&gt;&quot;">' +
+        'https://x.test/?a=1&amp;b="&lt;&gt;"</a></p>',
+    ]);
   });
 });
 
