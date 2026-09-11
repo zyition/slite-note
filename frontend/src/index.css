@@ -24,6 +24,9 @@
   --code-bg: rgba(122, 94, 14, 0.1);
   --quote-border: #d4a800;
   --ring: rgba(232, 179, 0, 0.5);
+  /* Link ink: the yellow accent is unusable as text (≈1.8:1 on --bg), so
+     links get a classic blue-ink colour that reads on every note theme. */
+  --link: #0b5cad;
 }
 
 [data-theme="gray"] {
@@ -42,6 +45,7 @@
   --code-bg: rgba(0, 0, 0, 0.05);
   --quote-border: #a8a8a4;
   --ring: rgba(63, 63, 70, 0.5);
+  --link: #0b5cad;
 }
 
 [data-theme="dark"] {
@@ -60,6 +64,8 @@
   --code-bg: rgba(255, 255, 255, 0.08);
   --quote-border: #4aa4a0;
   --ring: rgba(74, 164, 160, 0.5);
+  /* Lighter blue: the light themes' #0b5cad only reaches ≈2.4:1 on --bg. */
+  --link: #6fb3ff;
 }
 
 html,
@@ -324,6 +330,25 @@ body {
 .bn-editor .bn-block[data-content-type="codeBlock"] .bn-block-content {
   background: var(--code-bg);
   border-radius: 6px;
+}
+
+/* Links: BlockNote renders them in the plain editor text colour with no
+   underline, which is indistinguishable from body copy on a note background.
+   Always underlined + --link ink (per-theme, AA contrast), with a hover wash
+   so they also respond to the pointer. */
+.bn-editor a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.bn-editor a:hover {
+  text-decoration-color: var(--link);
+  background: color-mix(in srgb, var(--link) 12%, transparent);
 }
 
 /* ------------------------------------------------------------------ */
