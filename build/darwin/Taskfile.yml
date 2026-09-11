@@ -22,6 +22,11 @@ tasks:
     vars:
       DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
       OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+      # Wails beta.19 gates private macOS APIs (webview transparency via
+      # MacBackdropTransparent, programmatic inspector, ...) behind this build
+      # tag; without it those features silently no-op and the transparent
+      # note background breaks. Explicitly passing EXTRA_TAGS overrides this.
+      EXTRA_TAGS: '{{.EXTRA_TAGS | default "private_mac_apis"}}'
 
   build:native:
     summary: Builds the application natively on macOS
