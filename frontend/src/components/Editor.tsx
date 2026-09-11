@@ -61,7 +61,7 @@ import {
   selectedImageUrl,
   urlOnlyFrom,
 } from "../services/clipboard";
-import { hasPrimaryModifier, SHORTCUT_MODIFIER } from "../services/platform";
+import { hasPrimaryModifier, isMac, SHORTCUT_MODIFIER } from "../services/platform";
 import { t, useLocale } from "../services/i18n";
 import type { Note } from "../types/note";
 
@@ -491,6 +491,32 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
     );
   }, [editor]);
 
+  // Ctrl/Cmd+Shift+V is the keyboard form of the context-menu "paste as plain
+  // text" action above — same pastePlain, so the two entry points cannot
+  // drift. Captured on the editor DOM in the capture phase with
+  // stopPropagation so it wins over both ProseMirror's keymap and the
+  // webview's native "paste without formatting" equivalent; the primary
+  // modifier is platform-aware (Cmd on macOS, Ctrl elsewhere —
+  // hasPrimaryModifier also rejects the other platform's modifier).
+  useEffect(() => {
+    const dom = editor.domElement;
+    if (!dom) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.shiftKey &&
+        !e.altKey &&
+        hasPrimaryModifier(e) &&
+        e.key.toLowerCase() === "v"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        pastePlain();
+      }
+    };
+    dom.addEventListener("keydown", onKeyDown, true);
+    return () => dom.removeEventListener("keydown", onKeyDown, true);
+  }, [editor, pastePlain]);
+
   const selectAll = useCallback(() => {
     editor._tiptapEditor.commands.selectAll();
     editor.focus();
@@ -552,6 +578,7 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
         {
           label: t.menuPastePlain,
           icon: <ClipboardType size={12} />,
+          shortcut: isMac() ? "⌘⇧V" : "Ctrl+Shift+V",
           onSelect: pastePlain,
         },
         "separator",
