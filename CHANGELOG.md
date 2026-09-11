@@ -1,3 +1,12 @@
+## [0.9.2] - 2026-09-11
+
+### Features
+
+- *(editor)* Drop image files onto the editor on macOS
+
+### Documentation
+
+- Mark the macOS image-drop backlog item shipped in v0.9.2
 ## [0.9.0] - 2026-09-11
 
 ### Features
