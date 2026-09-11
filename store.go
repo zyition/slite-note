@@ -198,6 +198,14 @@ func (s *Store) AppVersion() string {
 // the webview does not follow external links.
 func (s *Store) OpenURL(url string) error { return openURL(url) }
 
+// SetTrayLanguage updates the native tray-menu labels after the frontend
+// resolves the UI language (on boot, and again whenever the user changes it).
+// Go builds the tray before the webview loads and cannot resolve "" (follow
+// the OS) itself, so the resolved locale always arrives here; unknown values
+// fall back to English. Not persisted — the language setting itself is saved
+// by SaveSettings.
+func (s *Store) SetTrayLanguage(language string) { applyTrayLanguage(language) }
+
 // LoadNotes reads all notes from disk (per-note files under notes/), sorting
 // by CreatedAt so the list order is stable regardless of directory order. On
 // the first read after an upgrade it migrates the legacy single-file

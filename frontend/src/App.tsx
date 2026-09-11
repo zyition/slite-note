@@ -24,6 +24,7 @@ import {
   onOpenSettings,
   openMarkdownDialog,
   exportAllMarkdown,
+  setTrayLanguage,
 } from "./services/bridge";
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -132,6 +133,13 @@ export default function App() {
   // new language (t is a live proxy; the subscription just triggers updates).
   // Also used to remount the editor so BlockNote's locale dictionary applies.
   const locale = useLocale();
+
+  // Keep the native tray menu labels in sync: Go builds the tray before the
+  // webview can resolve the language, so the resolved locale is pushed here
+  // on boot and on every change (no-op in the browser fallback).
+  useEffect(() => {
+    void setTrayLanguage(locale);
+  }, [locale]);
 
   /* ---------------- theme side effects ---------------- */
 

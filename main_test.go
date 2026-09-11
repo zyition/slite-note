@@ -42,3 +42,22 @@ func TestServeAttachmentRejectsTraversal(t *testing.T) {
 		t.Fatalf("traversal escaped: code=%d body=%q", rec.Code, rec.Body.String())
 	}
 }
+
+// Tray labels resolve per language with English as the fallback for "" (follow
+// the OS) and any unknown value — the tray is built before the webview can
+// push the resolved locale.
+func TestTrayLabelsFor(t *testing.T) {
+	en := trayLabelsFor("en")
+	if en.showHide != "Show/Hide" || en.settings != "Settings..." || en.quit != "Quit" {
+		t.Fatalf("unexpected en labels: %+v", en)
+	}
+	zh := trayLabelsFor("zh-CN")
+	if zh.showHide == en.showHide || zh.quit == en.quit {
+		t.Fatalf("zh-CN labels must differ from en: %+v", zh)
+	}
+	for _, lang := range []string{"", "system", "fr-FR"} {
+		if got := trayLabelsFor(lang); got != en {
+			t.Fatalf("fallback for %q = %+v, want en %+v", lang, got, en)
+		}
+	}
+}

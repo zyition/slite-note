@@ -104,6 +104,15 @@ export async function setHotkey(combo: string): Promise<void> {
   }
 }
 
+/** Push the resolved UI language to the native tray menu (no-op in browser
+ * fallback). Go builds the tray before the webview loads, so the resolved
+ * locale — not the raw setting, which may be "system" — arrives here. */
+export async function setTrayLanguage(language: string): Promise<void> {
+  if (await isNative()) {
+    await Store.SetTrayLanguage(language);
+  }
+}
+
 /** Suspend the global toggle hotkey while recording a new one. */
 export async function suspendHotkey(): Promise<void> {
   if (await isNative()) {

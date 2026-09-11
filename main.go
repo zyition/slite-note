@@ -128,7 +128,64 @@ var (
 	app        *application.App
 	mainWindow *application.WebviewWindow
 	store      *Store
+	tray       *application.SystemTray
 )
+
+// trayMenuStrings holds the native tray-menu labels per supported UI
+// language. English is the fallback: the tray is built before the webview
+// loads, and "" (follow the OS) and unknown values can only be resolved by
+// the frontend, which pushes the resolved locale via SetTrayLanguage.
+type trayMenuLabels struct{ showHide, settings, quit string }
+
+var trayMenuStrings = map[string]trayMenuLabels{
+	"en":    {"Show/Hide", "Settings...", "Quit"},
+	"zh-CN": {"显示/隐藏", "设置…", "退出"},
+}
+
+func trayLabelsFor(language string) trayMenuLabels {
+	if labels, ok := trayMenuStrings[language]; ok {
+		return labels
+	}
+	return trayMenuStrings["en"]
+}
+
+// currentTrayLanguage tracks the language the tray menu was last built with,
+// so repeat pushes of the same locale do not rebuild the native menu.
+var currentTrayLanguage string
+
+// applyTrayLanguage rebuilds the tray menu with the labels for language.
+// Safe to call before setupTray (no-op) or repeatedly with the same value.
+func applyTrayLanguage(language string) {
+	if tray == nil || language == currentTrayLanguage {
+		return
+	}
+	currentTrayLanguage = language
+	tray.SetMenu(buildTrayMenu(language))
+}
+
+func buildTrayMenu(language string) *application.Menu {
+	labels := trayLabelsFor(language)
+	menu := app.NewMenu()
+	menu.Add(labels.showHide).OnClick(func(ctx *application.Context) {
+		toggleWindow()
+	})
+	menu.Add(labels.settings).OnClick(func(ctx *application.Context) {
+		app.Event.Emit("app:open-settings", "")
+		if !mainWindow.IsVisible() {
+			mainWindow.Show()
+		}
+		mainWindow.Focus()
+	})
+	menu.AddSeparator()
+	menu.Add(labels.quit).OnClick(func(ctx *application.Context) {
+		// Give the frontend a moment to flush pending auto-saves.
+		flushBoundsSave()
+		app.Event.Emit("app:quit", "")
+		time.Sleep(250 * time.Millisecond)
+		app.Quit()
+	})
+	return menu
+}
 
 // webviewDataPath returns a tidy WebView2 user-data location (%LOCALAPPDATA%
 // /slite/webview), or "" to let the runtime pick a default when LocalAppData
@@ -640,7 +697,7 @@ func flushBoundsSave() {
 // setupTray creates the system tray icon with a menu (Show/Hide, Quit). Left
 // click toggles window visibility; the menu mirrors the same actions.
 func setupTray() {
-	tray := app.SystemTray.New()
+	tray = app.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetTooltip("Slite Note")
 	// On macOS the label renders as text next to the status-bar icon (NSStatusItem
@@ -650,26 +707,11 @@ func setupTray() {
 		tray.SetLabel("Slite Note")
 	}
 
-	menu := app.NewMenu()
-	menu.Add("Show/Hide").OnClick(func(ctx *application.Context) {
-		toggleWindow()
-	})
-	menu.Add("Settings...").OnClick(func(ctx *application.Context) {
-		app.Event.Emit("app:open-settings", "")
-		if !mainWindow.IsVisible() {
-			mainWindow.Show()
-		}
-		mainWindow.Focus()
-	})
-	menu.AddSeparator()
-	menu.Add("Quit").OnClick(func(ctx *application.Context) {
-		// Give the frontend a moment to flush pending auto-saves.
-		flushBoundsSave()
-		app.Event.Emit("app:quit", "")
-		time.Sleep(250 * time.Millisecond)
-		app.Quit()
-	})
-	tray.SetMenu(menu)
+	// Labels follow the persisted language setting when it names a concrete
+	// locale; "" (follow the OS) starts in English until the frontend resolves
+	// the locale and pushes it back via SetTrayLanguage.
+	applyTrayLanguage(store.currentSettings().Language)
+
 	tray.OnClick(toggleWindow)
 	// NOTE: do NOT call tray.Run() here — SystemTray.New() already runs the
 	// tray when the app is running (runOrDeferToAppRun), and a second Run()

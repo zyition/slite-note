@@ -200,6 +200,18 @@ export function SetHotkey(combo: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetTrayLanguage updates the native tray-menu labels after the frontend
+ * resolves the UI language (on boot, and again whenever the user changes it).
+ * Go builds the tray before the webview loads and cannot resolve "" (follow
+ * the OS) itself, so the resolved locale always arrives here; unknown values
+ * fall back to English. Not persisted — the language setting itself is saved
+ * by SaveSettings.
+ */
+export function SetTrayLanguage(language: string): $CancellablePromise<void> {
+    return $Call.ByID(316771627, language);
+}
+
+/**
  * SetWindowOpacityOverride temporarily forces the window fully opaque while
  * an app-modal overlay (settings panel, theme picker) is open, so the
  * translucent backdrop does not muddy the overlay UI. on=false restores the
