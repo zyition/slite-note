@@ -21,7 +21,6 @@ import {
   hideWindow,
   onHide,
   onQuit,
-  onOpenSettings,
   openMarkdownDialog,
   exportAllMarkdown,
   setTrayLanguage,
@@ -311,11 +310,6 @@ export default function App() {
     },
     [reportSaveError],
   );
-
-  // Tray menu → Settings… opens the panel (and the panel itself closes via ✕).
-  useEffect(() => {
-    onOpenSettings(() => setSettingsOpen(true));
-  }, []);
 
   const selectTheme = useCallback(
     (choice: ThemeName) => {

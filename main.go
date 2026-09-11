@@ -41,7 +41,6 @@ func init() {
 	application.RegisterEvent[string]("app:hide")
 	application.RegisterEvent[string]("app:show")
 	application.RegisterEvent[string]("app:quit")
-	application.RegisterEvent[string]("app:open-settings")
 	application.RegisterEvent[droppedFilesEvent]("app:files-dropped")
 }
 
@@ -135,11 +134,11 @@ var (
 // language. English is the fallback: the tray is built before the webview
 // loads, and "" (follow the OS) and unknown values can only be resolved by
 // the frontend, which pushes the resolved locale via SetTrayLanguage.
-type trayMenuLabels struct{ showHide, settings, quit string }
+type trayMenuLabels struct{ showHide, quit string }
 
 var trayMenuStrings = map[string]trayMenuLabels{
-	"en":    {"Show/Hide", "Settings...", "Quit"},
-	"zh-CN": {"显示/隐藏", "设置…", "退出"},
+	"en":    {"Show/Hide", "Quit"},
+	"zh-CN": {"显示/隐藏", "退出"},
 }
 
 func trayLabelsFor(language string) trayMenuLabels {
@@ -168,13 +167,6 @@ func buildTrayMenu(language string) *application.Menu {
 	menu := app.NewMenu()
 	menu.Add(labels.showHide).OnClick(func(ctx *application.Context) {
 		toggleWindow()
-	})
-	menu.Add(labels.settings).OnClick(func(ctx *application.Context) {
-		app.Event.Emit("app:open-settings", "")
-		if !mainWindow.IsVisible() {
-			mainWindow.Show()
-		}
-		mainWindow.Focus()
 	})
 	menu.AddSeparator()
 	menu.Add(labels.quit).OnClick(func(ctx *application.Context) {

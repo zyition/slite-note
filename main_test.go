@@ -48,7 +48,7 @@ func TestServeAttachmentRejectsTraversal(t *testing.T) {
 // push the resolved locale.
 func TestTrayLabelsFor(t *testing.T) {
 	en := trayLabelsFor("en")
-	if en.showHide != "Show/Hide" || en.settings != "Settings..." || en.quit != "Quit" {
+	if en.showHide != "Show/Hide" || en.quit != "Quit" {
 		t.Fatalf("unexpected en labels: %+v", en)
 	}
 	zh := trayLabelsFor("zh-CN")

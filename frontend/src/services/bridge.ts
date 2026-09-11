@@ -398,10 +398,6 @@ export function onQuit(callback: () => void): void {
   if (native) Events.On("app:quit", callback);
 }
 
-export function onOpenSettings(callback: () => void): void {
-  if (native) Events.On("app:open-settings", callback);
-}
-
 /** A native file drop landed at (x, y) — CSS px in the window's content area,
  * the same space DOM drag events report. macOS only: on Windows the DOM drop
  * handler in the editor has already inserted the picture by the time this

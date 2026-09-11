@@ -14,7 +14,6 @@ declare module "@wailsio/runtime" {
         interface CustomEvents {
             "app:files-dropped": main$0.droppedFilesEvent;
             "app:hide": string;
-            "app:open-settings": string;
             "app:quit": string;
             "app:show": string;
         }
