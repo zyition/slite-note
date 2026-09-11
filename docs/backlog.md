@@ -6,6 +6,25 @@ intentionally shows no roadmap; pick from here when planning the next release.
 - Linux port (design shape reserved in the platform layer — ADR-0006; settle
   details in a grilling round when picked up)
 - `scoop` / `winget` manifests
+- IME candidate window occasionally lands at the screen's top-left corner
+  instead of following the caret (seen once with the slash menu open; text
+  still commits correctly, so DOM focus is fine). WebView2's TSF caret
+  reporting fails intermittently at 125/150% display scaling — upstream
+  WebView2Feedback #1611 / #2241, still open, runtime 152.0.4191.66 affected.
+  No API exists to force a re-anchor; keep an eye on upstream.
+- macOS: dropping image files does nothing. Wails intercepts file drags
+  natively on macOS (`webview_window_darwin_drag.m` registers
+  `NSFilenamesPboardType` on an overlay NSView), so the DOM `drop` event
+  never carries the files — `onDropCapture` in Editor.tsx cannot see them
+  and the paths go to Wails' `WindowFilesDropped` event, which is unused.
+  Fix needs a mac path: listen for the dropped-files event, hand the paths
+  to a Go binding that returns the bytes, and feed `insertImageFiles` with
+  the drop coordinates. Note the hover highlight still works on macOS (it
+  is driven by Go → `handleDragOver` → the `data-file-drop-target`
+  attribute), so a drop currently *looks* accepted but inserts nothing.
+- macOS: the context-menu Paste uses `navigator.clipboard.read()`, whose
+  WKWebView permission behaviour is unverified (keyboard Cmd+V is a real
+  paste event and unaffected). Verify on a mac before relying on it.
 
 ## Rejected
 
