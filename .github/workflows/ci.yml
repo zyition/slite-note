@@ -3,6 +3,11 @@ name: ci
 on:
   push:
     branches: [master, main]
+    # The release workflow commits "docs: changelog for vX.Y.Z" back to
+    # master after every release; rebuilding windows+mac for a docs-only
+    # commit is pure waste, so skip those pushes.
+    paths-ignore:
+      - 'CHANGELOG.md'
   pull_request:
 
 jobs:
@@ -28,7 +33,7 @@ jobs:
 
       - name: Install wails3 CLI
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.20
           echo "$(go env GOPATH)/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Frontend type check
@@ -85,7 +90,7 @@ jobs:
 
       - name: Install wails3 CLI
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.20
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Frontend type check
