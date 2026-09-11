@@ -17,11 +17,12 @@ intentionally shows no roadmap; pick from here when planning the next release.
   `NSFilenamesPboardType` on an overlay NSView), so the DOM `drop` event
   never carries the files — `onDropCapture` in Editor.tsx cannot see them
   and the paths go to Wails' `WindowFilesDropped` event, which is unused.
-  Fix needs a mac path: listen for the dropped-files event, hand the paths
-  to a Go binding that returns the bytes, and feed `insertImageFiles` with
-  the drop coordinates. Note the hover highlight still works on macOS (it
-  is driven by Go → `handleDragOver` → the `data-file-drop-target`
-  attribute), so a drop currently *looks* accepted but inserts nothing.
+  Shipped in v0.9.2 (Go records the dropped images, `app:files-dropped`
+  hands the release point to the editor, bytes come back via
+  `LoadDroppedImages`). Pending real-hardware verification: drop placement
+  accuracy (1 pt = 1 CSS px assumed), especially on scaled/external
+  displays, and the hover highlight (the per-block hint stays Windows-only
+  — the native path never fires DOM dragover there).
 - macOS: the context-menu Paste uses `navigator.clipboard.read()`, whose
   WKWebView permission behaviour is unverified (keyboard Cmd+V is a real
   paste event and unaffected). Verify on a mac before relying on it.
