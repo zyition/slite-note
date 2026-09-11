@@ -1,3 +1,15 @@
+## [0.10.0] - 2026-09-11
+
+### Features
+
+- *(tray)* Localize tray menu labels
+- *(editor)* Ctrl/Cmd+Shift+V pastes as plain text
+
+### Bug Fixes
+
+- *(attachments)* Serve attachment responses with Cache-Control no-store
+- *(editor)* Drop replace/caption/rename/download from the formatting toolbar
+- *(tray)* Drop the settings menu entry
 ## [0.9.2] - 2026-09-11
 
 ### Features
