@@ -36,6 +36,7 @@ type droppedFilesEvent struct {
 	X int `json:"x"`
 	Y int `json:"y"`
 }
+
 func init() {
 	application.RegisterEvent[string]("app:hide")
 	application.RegisterEvent[string]("app:show")
@@ -110,6 +111,15 @@ func serveAttachment(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// no-store, deliberately: attachments are content-addressed files on local
+	// disk, so refetching on every render costs nothing — while a poisoned
+	// cache entry sticks forever. A response truncated mid-load (e.g. the
+	// window hiding while a picture was still loading) once got cached by
+	// WKWebView under its heuristic caching, and the image then stayed broken
+	// in the app even though the bytes on disk were fine and Safari rendered
+	// the same file correctly. With no-store nothing is ever stored, so a bad
+	// response cannot outlive the request that produced it.
+	w.Header().Set("Cache-Control", "no-store")
 	file := filepath.Join(store.currentDataDir(), "attachments", name)
 	http.ServeFile(w, r, file)
 }
