@@ -498,7 +498,16 @@ export default function App() {
         onHide={hide}
         onClose={hide}
       />
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main
+        className="min-h-0 flex-1 overflow-y-auto"
+        // Native file drop target: Wails' runtime only reports `copy` for file
+        // drags while the cursor is over an element with this attribute, and the
+        // editor's BlockNote drop handler inserts the image block from the DOM
+        // event (see EnableFileDrop in main.go). Scoped to the editing area on
+        // purpose — a drop on the title bar or the note list would otherwise look
+        // accepted but do nothing.
+        data-file-drop-target=""
+      >
         {activeNote && (
           <Editor
             key={`${activeNote.id}:${locale}`}

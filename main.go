@@ -211,6 +211,17 @@ func main() {
 		URL:              "/",
 		// Start hidden; shown after the startup positioning below to avoid a flash.
 		Hidden: true,
+		// EnableFileDrop is required for HTML5 file drops to reach the frontend at
+		// all. Wails' runtime listens for file drags on documentElement and, while
+		// this flag is false, sets `dataTransfer.dropEffect = "none"` on every
+		// dragover — the browser then never fires the `drop` event, so BlockNote's
+		// own drop handler can never see the file. With the flag on, the runtime
+		// reports `copy` only while the cursor is over an element carrying the
+		// `data-file-drop-target` attribute (see the editor wrapper in App.tsx);
+		// everything else still shows the "no drop" cursor. The native
+		// WindowFilesDropped path this also enables is unused: the editor reads the
+		// dropped files straight from the DOM event.
+		EnableFileDrop: true,
 		// macOS: make the window shell transparent so the frontend's semi-
 		// transparent note background (--bg-opacity) shows the desktop through.
 		// Ignored on Windows (which uses WS_EX_LAYERED for opacity instead).

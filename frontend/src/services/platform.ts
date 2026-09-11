@@ -13,3 +13,19 @@ export function isMac(): boolean {
     /Macintosh/.test(navigator.userAgent)
   );
 }
+
+/** Whether the event carries the platform's primary modifier (Cmd on macOS,
+ * Ctrl elsewhere) and not the *other* platform's one — so a Cmd shortcut does
+ * not fire on Ctrl and vice versa. Shared by every manual shortcut handler.
+ * (altKey/shiftKey are left to the caller: some shortcuts want them.) */
+export function hasPrimaryModifier(event: {
+  metaKey: boolean;
+  ctrlKey: boolean;
+}): boolean {
+  return isMac()
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
+/** The modifier symbol shown next to shortcut labels in menus. */
+export const SHORTCUT_MODIFIER = isMac() ? "⌘" : "Ctrl+";

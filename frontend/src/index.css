@@ -147,6 +147,25 @@ body {
   --wails-draggable: no-drag;
 }
 
+/* Native file drop: Wails' runtime adds this class to the element carrying
+   `data-file-drop-target` while a file drag hovers it (see App.tsx / main.go).
+   Inset outline rather than a border so the layout never shifts. */
+.file-drop-target-active {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: -4px;
+}
+
+/* Image drop position: while a picture is dragged over the editor, the block it
+   would land next to is marked with a line on that side (see dropPlacementAt in
+   components/Editor.tsx). Inset box-shadow so the layout never shifts. */
+.slite-drop-before {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.slite-drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
 /* ------------------------------------------------------------------ */
 /* Scrollbars: slim, rounded, theme-aware (no default grey chrome).    */
 /* ------------------------------------------------------------------ */

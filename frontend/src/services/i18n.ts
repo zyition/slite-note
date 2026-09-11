@@ -23,6 +23,15 @@ const en = {
   saveFailed: "Failed to save note",
   loadFailed: "Failed to load notes",
 
+  // Editor right-click menu (see components/EditorContextMenu.tsx)
+  menuCut: "Cut",
+  menuCopy: "Copy",
+  menuPaste: "Paste",
+  menuPastePlain: "Paste as plain text",
+  menuSelectAll: "Select all",
+  menuCopyImage: "Copy image",
+  menuDeleteBlock: "Delete block",
+
   // Note picker: delete / rename
   deleteNote: "Delete note",
   deleteConfirm: "Delete?",
@@ -140,6 +149,14 @@ const zhCN: typeof en = {
   placeholder: "输入 '/' 查看命令…",
   saveFailed: "保存便签失败",
   loadFailed: "加载便签失败",
+
+  menuCut: "剪切",
+  menuCopy: "复制",
+  menuPaste: "粘贴",
+  menuPastePlain: "粘贴为纯文本",
+  menuSelectAll: "全选",
+  menuCopyImage: "复制图片",
+  menuDeleteBlock: "删除块",
 
   deleteNote: "删除便签",
   deleteConfirm: "删除？",
