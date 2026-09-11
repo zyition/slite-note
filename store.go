@@ -107,6 +107,15 @@ type Store struct {
 	pickExportDir func() (string, error)
 	// pickOpenPath opens the native file-open dialog; "" = user cancelled.
 	pickOpenPath func() (string, error)
+
+	// dropMu guards droppedImages (see the native-drops section below). A
+	// separate mutex: the store's main mu is held across note writes, and a
+	// drop must never wait on those.
+	dropMu sync.Mutex
+	// droppedImages holds the image files of the most recent native drop
+	// gesture (macOS). Only the latest gesture is kept: a new drop supersedes
+	// the old one, so a stale entry can never be fetched twice by accident.
+	droppedImages []string
 }
 
 func NewStore() *Store {
@@ -357,6 +366,98 @@ func (s *Store) DeleteNote(id string) error {
 
 // attachmentsDir returns the binary-attachment directory inside the data dir.
 func (s *Store) attachmentsDir() string { return filepath.Join(s.dataDir, "attachments") }
+
+/* ------------------------------------------------------------------ */
+/* Native file drops (macOS)                                           */
+/*                                                                     */
+/* Wails intercepts file drags natively on macOS: the DOM `drop` event  */
+/* never carries the files, so the editor cannot read them the way it   */
+/* does on Windows. The Go side records the image files of the latest   */
+/* drop gesture (main.go, WindowFilesDropped) and the frontend fetches  */
+/* their bytes through LoadDroppedImages. The paths never reach the     */
+/* frontend: the binding reads only what a real drop gesture put here,  */
+/* which keeps the webview from using it as a generic file reader.      */
+/* ------------------------------------------------------------------ */
+
+// DroppedImage is one image file from a native file drop, delivered to the
+// frontend as bytes so it can go through the same insert-and-upload path as
+// a pasted picture (insertImageFiles → uploadFile → SaveAttachment).
+type DroppedImage struct {
+	Name     string `json:"name"`
+	MimeType string `json:"mimeType"`
+	Base64   string `json:"base64"`
+}
+
+// droppedImageMaxSize caps one dropped file: a sticky-note picture has no
+// business being bigger, and the bytes travel base64-encoded over the bridge.
+const droppedImageMaxSize = 64 << 20 // 64 MB
+
+// imageMIMEByExt maps the extensions the editor can render as an image block
+// to their MIME type (the DOM path on Windows filters on file.type the same
+// way). HEIC is deliberately absent: WKWebView may decode it, but the saved
+// blob would not render in the editor nor in the Windows build.
+var imageMIMEByExt = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".bmp":  "image/bmp",
+	".svg":  "image/svg+xml",
+	".avif": "image/avif",
+}
+
+// noteDroppedImages records the image files of one drop gesture, replacing
+// whatever a previous gesture left behind.
+func (s *Store) noteDroppedImages(paths []string) {
+	s.dropMu.Lock()
+	defer s.dropMu.Unlock()
+	s.droppedImages = append([]string(nil), paths...)
+}
+
+// filterDroppedImages keeps the paths that end in a renderable image
+// extension, dropping everything else (same rule as the Windows DOM path,
+// which filters non-image files out of the drop payload).
+func filterDroppedImages(paths []string) []string {
+	var kept []string
+	for _, path := range paths {
+		ext := strings.ToLower(filepath.Ext(path))
+		if _, ok := imageMIMEByExt[ext]; ok {
+			kept = append(kept, path)
+		}
+	}
+	return kept
+}
+
+// LoadDroppedImages returns the bytes of the image files recorded for the
+// most recent native drop gesture. Resolves to an empty slice when the last
+// gesture carried no images (or there has not been one yet).
+func (s *Store) LoadDroppedImages() ([]DroppedImage, error) {
+	s.dropMu.Lock()
+	paths := append([]string(nil), s.droppedImages...)
+	s.dropMu.Unlock()
+
+	images := make([]DroppedImage, 0, len(paths))
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("stat dropped file: %w", err)
+		}
+		if info.Size() > droppedImageMaxSize {
+			return nil, fmt.Errorf("dropped file %s is too large (%d bytes)", filepath.Base(path), info.Size())
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read dropped file: %w", err)
+		}
+		images = append(images, DroppedImage{
+			Name:     filepath.Base(path),
+			MimeType: imageMIMEByExt[strings.ToLower(filepath.Ext(path))],
+			Base64:   base64.StdEncoding.EncodeToString(raw),
+		})
+	}
+	return images, nil
+}
 
 // SaveAttachment persists an image/audio/video/file blob as a content-addressed
 // <sha256[:16]>.<ext> file and returns its relative reference

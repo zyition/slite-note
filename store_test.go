@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -758,5 +760,93 @@ func TestAttachmentExt(t *testing.T) {
 	}
 	if got := attachmentExt("", "photo.JPG"); got != ".jpg" {
 		t.Fatalf("attachmentExt('', name) = %q, want .jpg", got)
+	}
+}
+
+func TestFilterDroppedImages(t *testing.T) {
+	kept := filterDroppedImages([]string{
+		"/tmp/pic.PNG", "/tmp/photo.jpeg", "/tmp/anim.gif", "/tmp/pic.webp",
+		"/tmp/pic.bmp", "/tmp/pic.svg", "/tmp/pic.avif", "/tmp/pic.jpg",
+		"/tmp/notes.pdf", "/tmp/archive.zip", "/tmp/noext", "/tmp/clip.HEIC",
+	})
+	want := []string{
+		"/tmp/pic.PNG", "/tmp/photo.jpeg", "/tmp/anim.gif", "/tmp/pic.webp",
+		"/tmp/pic.bmp", "/tmp/pic.svg", "/tmp/pic.avif", "/tmp/pic.jpg",
+	}
+	if !slices.Equal(kept, want) {
+		t.Fatalf("filter mismatch:\n got %v\nwant %v", kept, want)
+	}
+	if got := filterDroppedImages(nil); got != nil {
+		t.Fatalf("expected nil for empty input, got %v", got)
+	}
+}
+
+func TestLoadDroppedImagesRoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	dir := t.TempDir()
+	png := filepath.Join(dir, "shot.png")
+	raw := []byte{0x89, 'P', 'N', 'G', 0x0a}
+	if err := os.WriteFile(png, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A non-image in the same gesture is filtered before recording.
+	s.noteDroppedImages(filterDroppedImages([]string{png, "/tmp/notes.pdf"}))
+
+	images, err := s.LoadDroppedImages()
+	if err != nil {
+		t.Fatalf("LoadDroppedImages: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image, got %d: %+v", len(images), images)
+	}
+	img := images[0]
+	if img.Name != "shot.png" || img.MimeType != "image/png" {
+		t.Fatalf("unexpected name/mime: %q / %q", img.Name, img.MimeType)
+	}
+	if got, err := base64.StdEncoding.DecodeString(img.Base64); err != nil || !bytes.Equal(got, raw) {
+		t.Fatalf("base64 round trip mismatch: %q (%v)", img.Base64, err)
+	}
+}
+
+func TestLoadDroppedImagesLatestGestureWins(t *testing.T) {
+	s := newTestStore(t)
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.png")
+	second := filepath.Join(dir, "second.jpg")
+	for path, content := range map[string][]byte{first: {'a'}, second: {'b'}} {
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s.noteDroppedImages(filterDroppedImages([]string{first}))
+	s.noteDroppedImages(filterDroppedImages([]string{second}))
+
+	images, err := s.LoadDroppedImages()
+	if err != nil {
+		t.Fatalf("LoadDroppedImages: %v", err)
+	}
+	if len(images) != 1 || images[0].Name != "second.jpg" {
+		t.Fatalf("expected only the latest gesture's file, got %+v", images)
+	}
+}
+
+func TestLoadDroppedImagesEmpty(t *testing.T) {
+	s := newTestStore(t)
+	images, err := s.LoadDroppedImages()
+	if err != nil {
+		t.Fatalf("LoadDroppedImages: %v", err)
+	}
+	if len(images) != 0 {
+		t.Fatalf("expected no images, got %+v", images)
+	}
+}
+
+func TestLoadDroppedImagesMissingFile(t *testing.T) {
+	s := newTestStore(t)
+	s.noteDroppedImages([]string{filepath.Join(t.TempDir(), "gone.png")})
+	if _, err := s.LoadDroppedImages(); err == nil {
+		t.Fatal("expected an error for a vanished file")
 	}
 }

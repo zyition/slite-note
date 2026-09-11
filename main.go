@@ -28,11 +28,20 @@ var trayIcon []byte
 
 // App-wide events forwarded to the frontend so it can flush pending saves and
 // open the settings panel from the tray.
+
+// droppedFilesEvent tells the frontend where a native (macOS) file drop
+// landed. Coordinates are CSS pixels in the window's content area — the same
+// space DOM drag events report, so the editor can reuse its placement lookup.
+type droppedFilesEvent struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
 func init() {
 	application.RegisterEvent[string]("app:hide")
 	application.RegisterEvent[string]("app:show")
 	application.RegisterEvent[string]("app:quit")
 	application.RegisterEvent[string]("app:open-settings")
+	application.RegisterEvent[droppedFilesEvent]("app:files-dropped")
 }
 
 const (
@@ -218,9 +227,10 @@ func main() {
 		// own drop handler can never see the file. With the flag on, the runtime
 		// reports `copy` only while the cursor is over an element carrying the
 		// `data-file-drop-target` attribute (see the editor wrapper in App.tsx);
-		// everything else still shows the "no drop" cursor. The native
-		// WindowFilesDropped path this also enables is unused: the editor reads the
-		// dropped files straight from the DOM event.
+		// everything else still shows the "no drop" cursor. On Windows the editor
+		// reads the dropped files straight from the DOM event; on macOS the drop
+		// is intercepted natively and arrives via the WindowFilesDropped event
+		// below.
 		EnableFileDrop: true,
 		// macOS: make the window shell transparent so the frontend's semi-
 		// transparent note background (--bg-opacity) shows the desktop through.
@@ -235,6 +245,32 @@ func main() {
 	// (ADR-0003).
 	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		hideWindow()
+	})
+
+	// macOS: file drops are intercepted by Wails' native drag overlay (see
+	// EnableFileDrop above), so the DOM `drop` event never fires with files and
+	// the editor cannot see them. The runtime reports the drop here instead,
+	// with the file paths and the content-view coordinates of the release point
+	// (Cocoa points — 1 pt = 1 CSS px in the WKWebView, so they are directly
+	// comparable with the Windows DOM path's clientX/clientY). The image files
+	// are recorded in the store for the frontend to fetch (LoadDroppedImages)
+	// and the release point is broadcast so the picture lands where the pointer
+	// was. Windows keeps the plain DOM path: the event fires there too (after
+	// the DOM drop has already inserted the image), hence the darwin gate.
+	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		if runtime.GOOS != "darwin" {
+			return
+		}
+		paths := filterDroppedImages(event.Context().DroppedFiles())
+		if len(paths) == 0 {
+			return
+		}
+		x, y := 0, 0
+		if details := event.Context().DropTargetDetails(); details != nil {
+			x, y = details.X, details.Y
+		}
+		store.noteDroppedImages(paths)
+		app.Event.Emit("app:files-dropped", droppedFilesEvent{X: x, Y: y})
 	})
 
 	// Global hotkey toggles window visibility system-wide (core feature). The
