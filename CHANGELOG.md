@@ -1,3 +1,16 @@
+## [0.10.1] - 2026-09-14
+
+### Bug Fixes
+
+- *(windows)* Resolve startup background colour from the saved theme
+
+### Performance
+
+- *(windows)* Reclaim the process working set after the note is hidden
+
+### Documentation
+
+- Update AGENTS.md for the Windows + macOS platform split
 ## [0.10.0] - 2026-09-11
 
 ### Features
