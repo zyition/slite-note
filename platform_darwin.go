@@ -125,6 +125,12 @@ func registerPlatformHooks() {
 	})
 }
 
+// trimWorkingSetAfterHide is a no-op on macOS: App Nap plus macOS memory
+// compression already page out the (WebKit) child processes of a hidden
+// window, and there is no user-space API to shrink another process's working
+// set anyway. See platform_windows.go for the Windows implementation.
+func trimWorkingSetAfterHide() {}
+
 // systemPrefersDark reads the global macOS interface style. Best effort via
 // `defaults`: an error (key absent) means light mode. Only feeds the
 // window-creation background; the macOS shell is transparent regardless

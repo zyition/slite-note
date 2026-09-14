@@ -418,6 +418,10 @@ func main() {
 		// On a silent launch (--silent, e.g. auto-start) the window stays hidden
 		// and is summoned via hotkey/tray.
 		positionAndShow := func(*application.WindowEvent) {
+			// Fires on every navigation completion — a repeat after the initial
+			// boot means the webview reloaded (e.g. a killed renderer), which
+			// would explain a full UI flash on summon.
+			debugLog("navigation completed")
 			showMainWindowAtStartup()
 		}
 		mainWindow.OnWindowEvent(events.Windows.WebViewNavigationCompleted, positionAndShow)
@@ -637,6 +641,7 @@ var smokeMode = false
 // visible, e.g. the user alt-tabs back) do NOT emit this event, so the
 // frontend's caret memory / selection is never disturbed.
 func showMainWindow() {
+	debugLog("show: emitting app:show")
 	app.Event.Emit("app:show", "")
 	mainWindow.Show()
 	mainWindow.Focus()
@@ -662,6 +667,14 @@ func showMainWindowAtStartup() {
 	applyWindowOpacity()
 	if !silentStart {
 		showMainWindow()
+	} else {
+		// Silent launch (auto-start): the window is born hidden and nobody
+		// will ever call hideWindow(), so the hide-time trim would never fire
+		// and a login-started instance would sit at full working set until
+		// the first manual hide. Schedule the same debounced trim — its
+		// visibility gate keeps it correct if the user summons the window
+		// before it fires.
+		trimWorkingSetAfterHide()
 	}
 }
 
@@ -787,4 +800,7 @@ func hideWindow() {
 	app.Event.Emit("app:hide", "")
 	flushBoundsSave()
 	mainWindow.Hide()
+	// Release the (cold) physical working set of this process and the WebView2
+	// children; Windows-side only, no-op on macOS (see platform_windows.go).
+	trimWorkingSetAfterHide()
 }

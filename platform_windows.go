@@ -5,6 +5,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/zyition/slite-note/internal/windowutil"
@@ -178,4 +180,145 @@ func systemPrefersDark() bool {
 	defer k.Close()
 	v, _, err := k.GetIntegerValue("AppsUseLightTheme")
 	return err == nil && v == 0
+}
+
+// --- hide-time working-set trim (shrink physical RAM while hidden) ---
+//
+// A hidden slite-note is cold: nothing paints until summoned. Windows only
+// pages cold pages out under memory pressure, which on roomy machines may
+// never happen, so the whole WebView2 tree (browser + renderer) sits in
+// physical RAM indefinitely. Trimming on hide releases it immediately; the
+// pages come back via (memory-compressed) soft faults on the next show —
+// imperceptible for a window this small. The trade is deliberate: this is a
+// mostly-hidden always-on app. macOS counterpart is a no-op (see
+// platform_darwin.go) — App Nap + macOS memory compression already do this.
+
+// Win32 QUOTA_LIMITS_* flags (not exposed by golang.org/x/sys/windows): the
+// DISABLE pair makes the trim soft — the working set can grow back freely
+// afterwards instead of being capped.
+const (
+	quotaHardWsMinDisable = 0x00000002
+	quotaHardWsMaxDisable = 0x00000008
+)
+
+// trimHideDelay is the debounce window for the hide-time working-set trim.
+const trimHideDelay = 2 * time.Second
+
+// trimTimer arms a trailing-edge debounce: every hideWindow() call pushes the
+// trim trimHideDelay further out, so it runs once, trimHideDelay after the
+// LAST hide. Guarded by a mutex because Reset/nil-ing must not race with the
+// callback — schedule() callers (hotkey dispatch runs on its own goroutine,
+// see Wails' GlobalShortcutManager.dispatch) and the AfterFunc callback are
+// always different goroutines.
+type trimDebounce struct {
+	delay time.Duration
+
+	mu    sync.Mutex
+	timer *time.Timer
+
+	// hooks, overridden in tests (platform_windows_test.go)
+	windowHidden func() bool // precondition: trim only while hidden
+	run          func()      // the actual trim
+}
+
+// schedule coalesces requests into one run, delay after the last request.
+func (d *trimDebounce) schedule() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.timer != nil {
+		d.timer.Reset(d.delay) // re-arm: fire d.delay after the LAST request
+		return
+	}
+	d.timer = time.AfterFunc(d.delay, func() {
+		d.mu.Lock()
+		d.timer = nil
+		d.mu.Unlock()
+		// A re-show within the delay means the user wants the window back:
+		// skip the trim entirely instead of evicting pages of a visible
+		// window (immediate fault-back = repaint stutter).
+		if d.windowHidden() {
+			d.run()
+		}
+	})
+}
+
+// trimWorkingSetAfterHide is the platform entry point called from
+// hideWindow(). One-shot and debounced: trimming evicts hot pages along with
+// cold ones, and background work faults the hot subset back in over the
+// following seconds — the working set settles at its genuinely-active size
+// (~20MB) and stays there. That plateau is the OS finding the real hot set;
+// re-trimming on top of it would just evict live pages and churn CPU for a
+// few MB of bookkeeping.
+func trimWorkingSetAfterHide() {
+	trimSchedule.schedule()
+}
+
+// trimSchedule is the production debouncer; trimHideDelay gives the user time
+// to change their mind: a quick hotkey re-show within the window skips the
+// trim entirely. Nothing here is latency-sensitive — the only cost of a
+// longer delay is reclaiming the working set a little later, which is
+// invisible at minutes-timescale hiding.
+var trimSchedule = &trimDebounce{
+	delay:        trimHideDelay,
+	windowHidden: func() bool { return mainWindow == nil || !mainWindow.IsVisible() },
+	run:          trimWorkingSet,
+}
+
+// trimWorkingSet empties the working set of this process and every descendant
+// (WebView2 spawns msedgewebview2.exe children that hold the real memory).
+func trimWorkingSet() {
+	trimProcessWorkingSet(windows.CurrentProcess())
+	pids := descendantProcessIDs(uint32(os.Getpid()))
+	for _, pid := range pids {
+		h, err := windows.OpenProcess(
+			windows.PROCESS_SET_QUOTA|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+		if err != nil {
+			continue // exited meanwhile; best effort
+		}
+		trimProcessWorkingSet(h)
+		windows.CloseHandle(h)
+	}
+	debugLog("trim: self + %d descendant(s)", len(pids))
+}
+
+// trimProcessWorkingSet requests an empty working set (SIZE_T max = "remove
+// everything pageable"). Best effort; failures are harmless.
+func trimProcessWorkingSet(h windows.Handle) {
+	_ = windows.SetProcessWorkingSetSizeEx(h, ^uintptr(0), ^uintptr(0),
+		quotaHardWsMinDisable|quotaHardWsMaxDisable)
+}
+
+// descendantProcessIDs walks the process snapshot and returns every PID
+// descending from rootPID (WebView2 children may nest one level deep).
+func descendantProcessIDs(rootPID uint32) []uint32 {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil
+	}
+	defer windows.CloseHandle(snapshot)
+
+	children := make(map[uint32][]uint32)
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
+		if entry.ProcessID != 0 {
+			children[entry.ParentProcessID] = append(children[entry.ParentProcessID], entry.ProcessID)
+		}
+	}
+
+	var out []uint32
+	queue := []uint32{rootPID}
+	seen := map[uint32]bool{rootPID: true}
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		for _, child := range children[pid] {
+			if !seen[child] {
+				seen[child] = true
+				out = append(out, child)
+				queue = append(queue, child)
+			}
+		}
+	}
+	return out
 }
