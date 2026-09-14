@@ -4,7 +4,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -121,4 +123,13 @@ func registerPlatformHooks() {
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {
 		showMainWindow()
 	})
+}
+
+// systemPrefersDark reads the global macOS interface style. Best effort via
+// `defaults`: an error (key absent) means light mode. Only feeds the
+// window-creation background; the macOS shell is transparent regardless
+// (ADR-0008), so this is effectively cosmetic.
+func systemPrefersDark() bool {
+	out, err := exec.Command("defaults", "read", "-g", "AppleInterfaceStyle").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "Dark"
 }

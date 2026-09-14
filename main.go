@@ -64,6 +64,28 @@ var suspendedHotkey = ""
 // not re-applied by SaveSettings or the window-change hooks.
 var opacityOverride = false
 
+// startupBackgroundColour resolves the window-creation background from the
+// persisted theme so the very first frame already matches the UI — a
+// dark-theme user must never see the historical note-yellow flash when the
+// window (re)presents before the webview does. RGB values mirror THEMES in
+// frontend/src/services/theme.ts; keep them in sync.
+func startupBackgroundColour(theme string) application.RGBA {
+	dark := application.NewRGB(31, 31, 31)
+	switch theme {
+	case "dark":
+		return dark
+	case "gray":
+		return application.NewRGB(244, 244, 242)
+	case "yellow":
+		return application.NewRGB(255, 243, 176) // legacy note yellow
+	default: // "system" or unknown
+		if systemPrefersDark() {
+			return dark
+		}
+		return application.NewRGB(255, 243, 176)
+	}
+}
+
 // debugLog writes diagnostics to %APPDATA%/slite/log.txt (kept small: useful
 // while the app is headless). Release builds stay silent — no log.txt on user
 // machines; SLITE_DEBUG=1 re-enables it for a session, and dev builds always
@@ -268,14 +290,19 @@ func main() {
 
 	settings := store.currentSettings()
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "Slite Note",
-		Width:            initialWidth,
-		Height:           480,
-		MinWidth:         280,
-		MinHeight:        320,
-		Frameless:        true,
-		AlwaysOnTop:      settings.AlwaysOnTop,
-		BackgroundColour: application.NewRGB(255, 243, 176), // note yellow (default theme)
+		Title:       "Slite Note",
+		Width:       initialWidth,
+		Height:      480,
+		MinWidth:    280,
+		MinHeight:   320,
+		Frameless:   true,
+		AlwaysOnTop: settings.AlwaysOnTop,
+		// Resolve from the persisted theme instead of hardcoding note yellow:
+		// the first presented frame (and any repaint before the webview
+		// presents again, e.g. right after a summon) must not flash yellow
+		// for a dark-theme user. The frontend keeps it in sync afterwards
+		// (bridge.setWindowBackground). See startupBackgroundColour.
+		BackgroundColour: startupBackgroundColour(settings.Theme),
 		URL:              "/",
 		// Start hidden; shown after the startup positioning below to avoid a flash.
 		Hidden: true,

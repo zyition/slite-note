@@ -9,6 +9,7 @@ import (
 
 	"github.com/zyition/slite-note/internal/windowutil"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // --- window opacity (Win32 WS_EX_LAYERED + SetLayeredWindowAttributes) ---
@@ -164,3 +165,17 @@ func setupPlatformUI() {}
 // registerPlatformHooks wires platform lifecycle events. Windows: the tray's
 // Quit already flushes pending bounds; nothing else to hook.
 func registerPlatformHooks() {}
+
+// systemPrefersDark reports the OS app-mode preference (registry
+// AppsUseLightTheme). Only feeds the window-creation background; the frontend
+// re-syncs the real theme through its own matchMedia listener.
+func systemPrefersDark() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	v, _, err := k.GetIntegerValue("AppsUseLightTheme")
+	return err == nil && v == 0
+}
