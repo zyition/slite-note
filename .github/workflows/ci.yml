@@ -58,11 +58,15 @@ jobs:
         run: go vet .
 
       - name: Go tests
-        # ./... covers both the main package (store tests) and
-        # internal/windowutil (pure Win32-adjacent logic). build/ios is a
+        # ./... covers both the main package (store tests + the hide-time
+        # trim debounce tests) and internal/windowutil. build/ios is a
         # cross-compile placeholder but its files carry ios build tags, so it
         # compiles cleanly on windows-latest.
-        run: go test ./...
+        # -race needs cgo: windows-latest ships MinGW gcc, but CGO_ENABLED
+        # is not guaranteed to default to 1, so set it explicitly.
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race ./...
 
   # macOS port: no real hardware locally, so a macOS runner is the only place
   # the darwin build-tagged files (platform_darwin.go, store_platform_darwin.go)
