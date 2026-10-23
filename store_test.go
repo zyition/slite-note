@@ -16,6 +16,29 @@ func newTestStore(t *testing.T) *Store {
 	return &Store{dataDir: t.TempDir(), settings: Settings{Theme: "system", Hotkey: defaultHotkey}}
 }
 
+func TestClampLightweightMinutes(t *testing.T) {
+	cases := map[int]int{-5: 0, 0: 0, 1: 1, 60: 60, 61: 60, 999: 60}
+	for in, want := range cases {
+		if got := clampLightweightMinutes(in); got != want {
+			t.Errorf("clampLightweightMinutes(%d) = %d, want %d", in, got, want)
+		}
+	}
+}
+
+// Persisted settings from older versions (or a hand-edited file) must never
+// arm a timer outside the UI's 0–60 range.
+func TestReadSettingsClampsLightweightMinutes(t *testing.T) {
+	s := newTestStore(t)
+	path := filepath.Join(s.dataDir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"lightweightModeMinutes":999}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := s.readSettingsFile(path)
+	if got.LightweightModeMinutes != lightweightMaxMinutes {
+		t.Fatalf("lightweightModeMinutes = %d, want %d", got.LightweightModeMinutes, lightweightMaxMinutes)
+	}
+}
+
 func TestSaveLoadNotesRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	note := Note{ID: "a", Blocks: []map[string]any{{"type": "paragraph"}}, CreatedAt: 1, UpdatedAt: 2}

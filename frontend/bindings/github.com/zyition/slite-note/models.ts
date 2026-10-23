@@ -77,6 +77,13 @@ export interface Settings {
     "autoCleanAttachments": boolean;
 
     /**
+     * LightweightModeMinutes destroys the hidden main window after this many
+     * minutes to release its WebView processes. 0 = keep it resident (default);
+     * clamped to 0–60.
+     */
+    "lightweightModeMinutes": number;
+
+    /**
      * Window bounds in physical pixels, persisted (debounced) on move/resize
      * so the window reopens where the user left it. 0 = never saved yet.
      * Owned by the Go side (SaveWindowBounds); the frontend must not set them.

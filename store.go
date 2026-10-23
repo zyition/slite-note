@@ -38,6 +38,10 @@ type Settings struct {
 	Language             string  `json:"language"`             // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
 	UiScale              string  `json:"uiScale"`              // "small" | "medium" | "large"; "" = medium (default)
 	AutoCleanAttachments bool    `json:"autoCleanAttachments"` // remove orphaned attachments at startup (default off)
+	// LightweightModeMinutes destroys the hidden main window after this many
+	// minutes to release its WebView processes. 0 = keep it resident (default);
+	// clamped to 0–60.
+	LightweightModeMinutes int `json:"lightweightModeMinutes"`
 
 	// Window bounds in physical pixels, persisted (debounced) on move/resize
 	// so the window reopens where the user left it. 0 = never saved yet.
@@ -46,6 +50,21 @@ type Settings struct {
 	WindowY      int `json:"windowY,omitempty"`
 	WindowWidth  int `json:"windowWidth,omitempty"`
 	WindowHeight int `json:"windowHeight,omitempty"`
+}
+
+// lightweightMaxMinutes bounds Settings.LightweightModeMinutes.
+const lightweightMaxMinutes = 60
+
+// clampLightweightMinutes keeps a persisted/edited value inside the UI's
+// supported 0–60 range; 0 means "never destroy the hidden window".
+func clampLightweightMinutes(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > lightweightMaxMinutes {
+		return lightweightMaxMinutes
+	}
+	return v
 }
 
 // appConfigVersion is the schema version of app.json (the bootstrap pointer).
@@ -205,6 +224,17 @@ func (s *Store) OpenURL(url string) error { return openURL(url) }
 // fall back to English. Not persisted — the language setting itself is saved
 // by SaveSettings.
 func (s *Store) SetTrayLanguage(language string) { applyTrayLanguage(language) }
+
+// FrontendReady tells the native side that the page has mounted and attached
+// its event listeners. A recreated window stays hidden until this arrives, so
+// the summoning hotkey never flashes an empty page and app:show is not lost.
+func (s *Store) FrontendReady() { markFrontendReady() }
+
+// FlushComplete acknowledges app:flush-before-destroy once pending note edits
+// are on disk, letting the lightweight-mode timer close the window. viewState
+// is the page's opaque JSON snapshot of caret/selection and scroll position,
+// replayed after the next recreation.
+func (s *Store) FlushComplete(token, viewState string) { ackFrontendFlush(token, viewState) }
 
 // LoadNotes reads all notes from disk (per-note files under notes/), sorting
 // by CreatedAt so the list order is stable regardless of directory order. On
@@ -648,6 +678,7 @@ func (s *Store) SaveSettings(settings Settings) error {
 	} else if settings.Opacity > 1 {
 		settings.Opacity = 1
 	}
+	settings.LightweightModeMinutes = clampLightweightMinutes(settings.LightweightModeMinutes)
 	s.mu.Lock()
 	prev := s.settings
 	// Window bounds are owned by the Go side and updated asynchronously on
@@ -672,13 +703,16 @@ func (s *Store) SaveSettings(settings Settings) error {
 			return err
 		}
 	}
-	if mainWindow != nil {
-		mainWindow.SetAlwaysOnTop(settings.AlwaysOnTop)
+	if w := getMainWindow(); w != nil {
+		w.SetAlwaysOnTop(settings.AlwaysOnTop)
 		if !opacityOverride {
 			if err := setWindowOpacity(settings.Opacity); err != nil {
 				log.Printf("slite: set opacity: %v", err)
 			}
 		}
+	}
+	if s.settings.LightweightModeMinutes != prev.LightweightModeMinutes {
+		syncLightweightTimer()
 	}
 	return nil
 }
@@ -1143,6 +1177,7 @@ func (s *Store) readSettingsFile(path string) Settings {
 	if settings.Opacity < windowutil.OpacityFloor || settings.Opacity > 1 {
 		settings.Opacity = 1
 	}
+	settings.LightweightModeMinutes = clampLightweightMinutes(settings.LightweightModeMinutes)
 	return settings
 }
 

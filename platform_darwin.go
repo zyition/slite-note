@@ -46,23 +46,25 @@ func screenScaleFactor() float64 {
 // points). Wails' SetPosition/SetSize go through setBounds on the main thread
 // (NSWindow setFrame), which is reliable on macOS even for a hidden window.
 func setWindowBounds(x, y, w, h int) {
-	if mainWindow == nil {
+	win := getMainWindow()
+	if win == nil {
 		return
 	}
 	sf := screenScaleFactor()
-	mainWindow.SetPosition(int(float64(x)/sf), int(float64(y)/sf))
-	mainWindow.SetSize(int(float64(w)/sf), int(float64(h)/sf))
+	win.SetPosition(int(float64(x)/sf), int(float64(y)/sf))
+	win.SetSize(int(float64(w)/sf), int(float64(h)/sf))
 }
 
 // saveWindowBoundsNow reads the window bounds (logical points → physical
 // pixels, matching the persisted units) and saves them. Best effort.
 func saveWindowBoundsNow() {
 	boundsSaveTimer = nil
-	if mainWindow == nil {
+	win := getMainWindow()
+	if win == nil {
 		return
 	}
-	x, y := mainWindow.Position()
-	w, h := mainWindow.Size()
+	x, y := win.Position()
+	w, h := win.Size()
 	if w <= 0 || h <= 0 {
 		return
 	}
@@ -96,11 +98,15 @@ func setupPlatformUI() {
 
 	appMenu := menu.AddRole(application.AppMenu)
 	appMenu.Add("Settings…").SetAccelerator("Cmd+,").OnClick(func(ctx *application.Context) {
-		app.Event.Emit("app:open-settings", "")
-		if !mainWindow.IsVisible() {
-			mainWindow.Show()
+		if w := getMainWindow(); w == nil || isPendingReveal() || isDestroying() {
+			// No page is listening yet: replay the action when a recreated
+			// window finishes revealing.
+			markPendingOpenSettings()
+			showMainWindow()
+			return
 		}
-		mainWindow.Focus()
+		app.Event.Emit("app:open-settings", "")
+		showMainWindow()
 	})
 	appMenu.AddRole(application.Hide)
 	appMenu.AddRole(application.Quit)
@@ -118,6 +124,7 @@ func setupPlatformUI() {
 // Dock icon of a hidden window should summon it (standard mac behaviour).
 func registerPlatformHooks() {
 	app.Event.OnApplicationEvent(events.Mac.ApplicationWillTerminate, func(*application.ApplicationEvent) {
+		setQuitting()
 		flushBoundsSave()
 	})
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {

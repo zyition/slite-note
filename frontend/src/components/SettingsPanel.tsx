@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Image, Info, Keyboard, Loader2, Power, Trash2, Type, X } from "lucide-react";
+import { Check, Droplets, FileDown, FolderOpen, FolderSearch, Image, Info, Keyboard, Loader2, MemoryStick, Power, Trash2, Type, X } from "lucide-react";
 import type { Settings } from "../types/note";
 import { UI_SCALES, normalizeUiScale, type UiScaleName } from "../types/note";
 import { t } from "../services/i18n";
@@ -235,6 +235,11 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
   // Backwards-compatible opacity: unset (0 / missing) means fully opaque.
   const opacityValue =
     settings.opacity && settings.opacity >= OPACITY_MIN ? settings.opacity : OPACITY_MAX;
+  // Legacy settings (and browser localStorage) may omit the field.
+  const lightweightMinutes = Math.min(
+    60,
+    Math.max(0, Math.round(settings.lightweightModeMinutes ?? 0)),
+  );
   // Slider-thumb position between min and max (0–100%), used to size the
   // accent fill so it never runs past the thumb.
   const opacityPct = ((opacityValue - OPACITY_MIN) / (OPACITY_MAX - OPACITY_MIN)) * 100;
@@ -346,6 +351,32 @@ export function SettingsPanel({ open, settings, onClose, onChanged, onExportAll 
             <span className="ml-2 align-middle text-[length:var(--fs-body)]">
               {settings.launchAtStartup ? t.on : t.off}
             </span>
+          </section>
+
+          {/* Lightweight mode: destroy the hidden window after N minutes */}
+          <section>
+            <div className={sectionLabel}>
+              <MemoryStick size={11} className="h-[length:var(--icon-sm)] w-[length:var(--icon-sm)]" /> {t.lightweightSection}
+            </div>
+            <p className="mb-2 text-[length:var(--fs-desc)] leading-snug text-[var(--fg-muted)]">{t.lightweightDesc}</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={60}
+                step={1}
+                value={lightweightMinutes}
+                onChange={(e) =>
+                  onChanged({ ...settings, lightweightModeMinutes: Number(e.target.value) })
+                }
+                className="slite-range flex-1"
+                style={{ "--range-pct": `${(lightweightMinutes / 60) * 100}%` } as React.CSSProperties}
+                aria-label={t.lightweightSection}
+              />
+              <span className="w-14 text-right text-[length:var(--fs-body)] tabular-nums">
+                {lightweightMinutes === 0 ? t.off : t.lightweightMinutes(lightweightMinutes)}
+              </span>
+            </div>
           </section>
 
           {/* Window opacity */}

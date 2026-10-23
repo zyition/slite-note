@@ -21,10 +21,14 @@ import {
   hideWindow,
   onHide,
   onQuit,
+  onFlushBeforeDestroy,
+  flushComplete,
+  frontendReady,
   openMarkdownDialog,
   exportAllMarkdown,
   setTrayLanguage,
 } from "./services/bridge";
+import { captureViewState } from "./services/viewState";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -233,13 +237,44 @@ export default function App() {
     void persistChanges();
   }, [persistChanges]);
 
-  // Flush pending saves when the window hides or the app quits.
+  // Awaitable flush used by the lightweight-mode teardown: Go keeps the window
+  // alive until the acknowledgement arrives, so the last edits are on disk
+  // before the WebView is destroyed.
+  const flushSaveNow = useCallback(async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    await persistChanges();
+  }, [persistChanges]);
+
+  // Flush pending saves when the window hides or the app quits. Registering
+  // through bridge waits for the async native probe.
   useEffect(() => {
     onHide(flushSave);
     onQuit(flushSave);
+    const offFlush = onFlushBeforeDestroy(async (token) => {
+      const viewState = captureViewState();
+      try {
+        await flushSaveNow();
+      } finally {
+        await flushComplete(token, viewState);
+      }
+    });
     window.addEventListener("beforeunload", flushSave);
-    return () => window.removeEventListener("beforeunload", flushSave);
-  }, [flushSave]);
+    return () => {
+      offFlush();
+      window.removeEventListener("beforeunload", flushSave);
+    };
+  }, [flushSave, flushSaveNow]);
+
+  // Tell Go only once the boot data is loaded and the UI is actually ready:
+  // a window recreated in lightweight mode stays hidden until then, so the
+  // summon does not flash an empty note.
+  useEffect(() => {
+    if (!ready) return;
+    void frontendReady();
+  }, [ready]);
 
   /* ---------------- actions ---------------- */
 
@@ -525,6 +560,9 @@ export default function App() {
       />
       <main
         className="min-h-0 flex-1 overflow-y-auto"
+        // Scroll container whose position is captured before a lightweight
+        // teardown and restored after the window is recreated.
+        data-note-scroll=""
         // Native file drop target: Wails' runtime only reports `copy` for file
         // drags while the cursor is over an element with this attribute, and the
         // editor's BlockNote drop handler inserts the image block from the DOM

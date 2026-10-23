@@ -49,10 +49,11 @@ var (
 // setWindowOpacity applies a whole-window alpha (1 = fully opaque). A value of
 // 0 or >= 1 removes the layered style entirely to avoid any DWM side effects.
 func setWindowOpacity(alpha float64) error {
-	if mainWindow == nil {
+	w := getMainWindow()
+	if w == nil {
 		return nil
 	}
-	hwnd := uintptr(mainWindow.NativeWindow())
+	hwnd := uintptr(w.NativeWindow())
 	if hwnd == 0 {
 		return nil
 	}
@@ -104,10 +105,11 @@ func applyWindowOpacity() {
 // the Wails setBounds path re-applies LWA_ALPHA=255 and is unreliable for a
 // still-hidden window).
 func setWindowBounds(x, y, w, h int) {
-	if mainWindow == nil {
+	win := getMainWindow()
+	if win == nil {
 		return
 	}
-	hwnd := uintptr(mainWindow.NativeWindow())
+	hwnd := uintptr(win.NativeWindow())
 	if hwnd == 0 {
 		return
 	}
@@ -120,10 +122,11 @@ func setWindowBounds(x, y, w, h int) {
 // only costs the last drag position.
 func saveWindowBoundsNow() {
 	boundsSaveTimer = nil
-	if mainWindow == nil {
+	win := getMainWindow()
+	if win == nil {
 		return
 	}
-	hwnd := uintptr(mainWindow.NativeWindow())
+	hwnd := uintptr(win.NativeWindow())
 	if hwnd == 0 {
 		return
 	}
@@ -259,9 +262,12 @@ func trimWorkingSetAfterHide() {
 // longer delay is reclaiming the working set a little later, which is
 // invisible at minutes-timescale hiding.
 var trimSchedule = &trimDebounce{
-	delay:        trimHideDelay,
-	windowHidden: func() bool { return mainWindow == nil || !mainWindow.IsVisible() },
-	run:          trimWorkingSet,
+	delay: trimHideDelay,
+	windowHidden: func() bool {
+		w := getMainWindow()
+		return w == nil || !w.IsVisible()
+	},
+	run: trimWorkingSet,
 }
 
 // trimWorkingSet empties the working set of this process and every descendant

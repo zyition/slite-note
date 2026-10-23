@@ -43,6 +43,32 @@ func TestServeAttachmentRejectsTraversal(t *testing.T) {
 	}
 }
 
+// A teardown acknowledgement must match the token of the flush in progress;
+// its view state is stored before the waiting closer is released.
+func TestFlushCompleteStoresMatchingViewState(t *testing.T) {
+	token, done := beginFrontendFlush()
+	if !ackFrontendFlush(token, `{"noteId":"a"}`) {
+		t.Fatal("matching ack was rejected")
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("matching ack did not release the waiter")
+	}
+	if got := takePendingViewState(); got != `{"noteId":"a"}` {
+		t.Fatalf("view state = %q", got)
+	}
+
+	token, _ = beginFrontendFlush()
+	if ackFrontendFlush("other", `{"noteId":"b"}`) {
+		t.Fatal("mismatched ack was accepted")
+	}
+	if got := takePendingViewState(); got != "" {
+		t.Fatalf("mismatched ack stored view state %q", got)
+	}
+	abandonFrontendFlush()
+}
+
 // Tray labels resolve per language with English as the fallback for "" (follow
 // the OS) and any unknown value — the tray is built before the webview can
 // push the resolved locale.

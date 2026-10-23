@@ -13,8 +13,10 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "app:files-dropped": main$0.droppedFilesEvent;
+            "app:flush-before-destroy": string;
             "app:hide": string;
             "app:quit": string;
+            "app:restore-view-state": string;
             "app:show": string;
         }
     }

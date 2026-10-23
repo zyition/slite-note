@@ -52,6 +52,10 @@ const en = {
   hotkeyChangeFailed: "Could not set that shortcut",
   autoStartSection: "Launch at startup",
   autoStartDesc: "Start Slite Note automatically when you sign in to your computer.",
+  lightweightSection: "Lightweight mode",
+  lightweightDesc:
+    "After the window has been hidden for this long, close it to release WebView memory. 0 keeps it ready in memory; reopening after a teardown takes a moment longer.",
+  lightweightMinutes: (n: number) => `${n} min`,
   dataSection: "Data location",
   dataDesc:
     "Notes and settings are stored in this folder. Move them to a new location, or point Slite Note at an existing one.",
@@ -180,6 +184,10 @@ const zhCN: typeof en = {
   hotkeyChangeFailed: "无法设置该快捷键",
   autoStartSection: "开机启动",
   autoStartDesc: "登录电脑后自动启动 Slite Note。",
+  lightweightSection: "轻量模式",
+  lightweightDesc:
+    "窗口隐藏超过设定时间后销毁窗口，释放 WebView 占用的内存。0 为不销毁；销毁后再次唤起会稍有延迟。",
+  lightweightMinutes: (n: number) => `${n} 分钟`,
   dataSection: "数据位置",
   dataDesc: "便签与设置保存在此文件夹中。可移动到新位置，或让 Slite Note 使用已有文件夹。",
   openExplorer: "在资源管理器中打开",

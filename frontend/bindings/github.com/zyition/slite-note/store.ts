@@ -69,6 +69,25 @@ export function ExportAllMarkdown(files: $models.MarkdownFile[] | null): $Cancel
 }
 
 /**
+ * FlushComplete acknowledges app:flush-before-destroy once pending note edits
+ * are on disk, letting the lightweight-mode timer close the window. viewState
+ * is the page's opaque JSON snapshot of caret/selection and scroll position,
+ * replayed after the next recreation.
+ */
+export function FlushComplete(token: string, viewState: string): $CancellablePromise<void> {
+    return $Call.ByID(2790373016, token, viewState);
+}
+
+/**
+ * FrontendReady tells the native side that the page has mounted and attached
+ * its event listeners. A recreated window stays hidden until this arrives, so
+ * the summoning hotkey never flashes an empty page and app:show is not lost.
+ */
+export function FrontendReady(): $CancellablePromise<void> {
+    return $Call.ByID(3057231954);
+}
+
+/**
  * LoadDroppedImages returns the bytes of the image files recorded for the
  * most recent native drop gesture. Resolves to an empty slice when the last
  * gesture carried no images (or there has not been one yet).

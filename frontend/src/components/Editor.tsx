@@ -44,10 +44,12 @@ import type { EditorMenuEntry } from "./EditorContextMenu";
 import {
   loadDroppedImages,
   onFilesDropped,
+  onRestoreViewState,
   onShow,
   resolveAttachmentUrl,
   uploadAttachment,
 } from "../services/bridge";
+import { applyViewState, registerViewState } from "../services/viewState";
 import {
   applyPendingImageUrls,
   canReadPixels,
@@ -294,6 +296,15 @@ export function Editor({ note, blocknoteTheme, onChange, onConverterReady }: Edi
     },
   });
   editorRef.current = editor;
+
+  // Capture target for lightweight-mode teardown: the selection and the
+  // scroll container's position are handed to Go just before the WebView is
+  // destroyed, then replayed after the window is recreated.
+  useEffect(() => registerViewState(note.id, editor), [editor, note.id]);
+
+  // Recreated window: app:show restored the last caret memory above, then
+  // this exact snapshot overrides it with the pre-teardown selection/scroll.
+  useEffect(() => onRestoreViewState((state) => applyViewState(state)), [editor]);
 
   // Expose the markdown converter to App for export/import. The schema is
   // shared by every note, so the converter stays valid for any note's blocks

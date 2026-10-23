@@ -20,17 +20,26 @@ const LS_NOTES = "slite:notes";
 const LS_SETTINGS = "slite:settings";
 
 let native: boolean | null = null;
+let nativeProbe: Promise<boolean> | null = null;
 
-/** Probe the Go backend with a call that never fails in native mode. */
-async function isNative(): Promise<boolean> {
-  if (native !== null) return native;
-  try {
-    await Store.Ping();
-    native = true;
-  } catch {
-    native = false;
+/** Probe the Go backend with a call that never fails in native mode. All
+ * callers share one probe, so listener registrations that await it run in
+ * call order (the child editor's app:show listener before App's
+ * frontendReady signal). */
+function isNative(): Promise<boolean> {
+  if (native !== null) return Promise.resolve(native);
+  if (!nativeProbe) {
+    nativeProbe = Store.Ping()
+      .then(() => {
+        native = true;
+        return true;
+      })
+      .catch(() => {
+        native = false;
+        return false;
+      });
   }
-  return native;
+  return nativeProbe;
 }
 
 /* ------------------------------------------------------------------ */
@@ -385,17 +394,69 @@ export async function setWindowOpacityOverride(on: boolean): Promise<void> {
 /* Events (Go → frontend)                                              */
 /* ------------------------------------------------------------------ */
 
-export function onHide(callback: () => void): void {
-  if (native) Events.On("app:hide", callback);
+/** Register once the runtime probe has resolved. The probe is async, and an
+ * effect may run before it settles; registering synchronously would silently
+ * drop the listener. Returns an off function that also cancels a pending
+ * registration. */
+function onNative(event: string, callback: (event: { data: unknown }) => void): () => void {
+  let off: (() => void) | null = null;
+  let cancelled = false;
+  void isNative().then((ok) => {
+    if (!ok || cancelled) return;
+    off = Events.On(event, callback);
+  });
+  return () => {
+    cancelled = true;
+    off?.();
+    off = null;
+  };
+}
+
+export function onHide(callback: () => void): () => void {
+  return onNative("app:hide", () => callback());
 }
 
 /** Window shown (hotkey / tray) — the editor focuses the end for typing. */
-export function onShow(callback: () => void): void {
-  if (native) Events.On("app:show", callback);
+export function onShow(callback: () => void): () => void {
+  return onNative("app:show", () => callback());
 }
 
-export function onQuit(callback: () => void): void {
-  if (native) Events.On("app:quit", callback);
+export function onQuit(callback: () => void): () => void {
+  return onNative("app:quit", () => callback());
+}
+
+/** Lightweight mode is about to close the window: persist any pending edits,
+ * then acknowledge with flushComplete(token). */
+export function onFlushBeforeDestroy(
+  callback: (token: string) => void,
+): () => void {
+  return onNative("app:flush-before-destroy", (event) => {
+    callback(String(event.data ?? ""));
+  });
+}
+
+/** Acknowledge app:flush-before-destroy so Go can release the window. The
+ * optional view state is replayed after the window is recreated. */
+export async function flushComplete(token: string, viewState: string): Promise<void> {
+  if (await isNative()) {
+    await Store.FlushComplete(token, viewState);
+  }
+}
+
+/** Restore the editor caret/selection and scroll position after a recreated
+ * window is revealed. The payload is the opaque JSON saved before teardown. */
+export function onRestoreViewState(callback: (state: string) => void): () => void {
+  return onNative("app:restore-view-state", (event) => {
+    callback(String(event.data ?? ""));
+  });
+}
+
+/** Tell Go the page has mounted and attached its event listeners. A window
+ * recreated in lightweight mode stays hidden until this arrives. */
+export async function frontendReady(): Promise<void> {
+  if (await isNative()) {
+    await Store.FrontendReady();
+  }
 }
 
 /** A native file drop landed at (x, y) — CSS px in the window's content area,
@@ -406,9 +467,8 @@ export function onQuit(callback: () => void): void {
 export function onFilesDropped(
   callback: (point: { x: number; y: number }) => void,
 ): () => void {
-  if (!native) return () => {};
-  return Events.On("app:files-dropped", (event) => {
-    callback(event.data);
+  return onNative("app:files-dropped", (event) => {
+    callback(event.data as { x: number; y: number });
   });
 }
 

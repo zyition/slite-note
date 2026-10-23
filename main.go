@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -41,14 +42,24 @@ func init() {
 	application.RegisterEvent[string]("app:hide")
 	application.RegisterEvent[string]("app:show")
 	application.RegisterEvent[string]("app:quit")
+	application.RegisterEvent[string]("app:flush-before-destroy")
+	application.RegisterEvent[string]("app:restore-view-state")
 	application.RegisterEvent[droppedFilesEvent]("app:files-dropped")
 }
 
 const (
-	defaultHotkey = "Alt+Shift+S"
-	initialWidth  = 480 // startup width; adjusted to 1/3 of the screen in positionWindowAtStartup
-	minWidth      = 320
-	minHeight     = 320
+	mainWindowName = "main"
+	defaultHotkey  = "Alt+Shift+S"
+	initialWidth   = 480 // startup width; adjusted to 1/3 of the screen in positionWindowAtStartup
+	minWidth       = 320
+	minHeight      = 320
+
+	// revealFallbackDelay bounds how long a recreated window stays hidden while
+	// waiting for the frontend's ready signal; after it, show it anyway.
+	revealFallbackDelay = 3 * time.Second
+	// destroyFlushTimeout bounds the save handshake before a lightweight-mode
+	// window teardown.
+	destroyFlushTimeout = 3 * time.Second
 )
 
 // activeHotkey is the currently registered toggle accelerator; empty while
@@ -146,11 +157,394 @@ func serveAttachment(store *Store, w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	app        *application.App
-	mainWindow *application.WebviewWindow
-	store      *Store
-	tray       *application.SystemTray
+	app   *application.App
+	store *Store
+	tray  *application.SystemTray
 )
+
+// --- window lifecycle / lightweight mode ---
+//
+// The app owns at most one WebView window. Hiding keeps it warm so summoning
+// is instant; after Settings.LightweightModeMinutes hidden minutes the window
+// is closed, which tears down WebView2/WKWebView and the renderer processes,
+// and the next summon recreates it.
+//
+// windowStateMu guards all fields below. The main window itself is looked up
+// through getMainWindow(): a closed window is removed from Wails' manager, so
+// the lookup is nil exactly when there is no window to talk to.
+var (
+	windowStateMu sync.Mutex
+
+	// destroyWindowID is the window a deliberate Close() is meant to destroy.
+	// The WindowClosing hook lets that close through and turns every other
+	// close request into a hide.
+	destroyWindowID uint
+
+	// destroying is true between requesting that close and the window leaving
+	// the manager; show requests during that gap are replayed afterwards.
+	destroying         bool
+	revealAfterDestroy bool
+
+	// quitting suppresses hide-on-close and timer-driven recreation while the
+	// app is terminating.
+	quitting bool
+
+	// pendingReveal is set while a recreated window waits for both navigation
+	// completion and the frontend ready signal before it is shown.
+	pendingReveal  bool
+	frontendReady  bool
+	navigationDone bool
+
+	// pendingOpenSettings replays the macOS Settings… menu action once a
+	// recreated window's frontend is ready.
+	pendingOpenSettings bool
+
+	lightweightTimer *time.Timer
+)
+
+// getMainWindow returns the live main window, or nil once it has been
+// destroyed. Never cache the returned pointer across a possible close.
+func getMainWindow() *application.WebviewWindow {
+	if app == nil {
+		return nil
+	}
+	w, ok := app.Window.Get(mainWindowName)
+	if !ok || w == nil {
+		return nil
+	}
+	ww, ok := w.(*application.WebviewWindow)
+	if !ok {
+		return nil
+	}
+	return ww
+}
+
+func setDestroyTarget(id uint) {
+	windowStateMu.Lock()
+	destroyWindowID = id
+	windowStateMu.Unlock()
+}
+
+func isDestroyTarget(id uint) bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	return quitting || destroyWindowID == id
+}
+
+func setQuitting() {
+	windowStateMu.Lock()
+	quitting = true
+	windowStateMu.Unlock()
+	cancelLightweightTimer()
+}
+
+func isQuitting() bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	return quitting
+}
+
+func setDestroying(on bool) {
+	windowStateMu.Lock()
+	destroying = on
+	if !on {
+		revealAfterDestroy = false
+	}
+	windowStateMu.Unlock()
+}
+
+func isDestroying() bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	return destroying
+}
+
+func setPendingReveal(on bool) {
+	windowStateMu.Lock()
+	pendingReveal = on
+	windowStateMu.Unlock()
+}
+
+func isPendingReveal() bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	return pendingReveal
+}
+
+func markFrontendReady() {
+	windowStateMu.Lock()
+	frontendReady = true
+	windowStateMu.Unlock()
+	maybeRevealRecreatedWindow()
+}
+
+func setFrontendReady(ready bool) {
+	windowStateMu.Lock()
+	frontendReady = ready
+	windowStateMu.Unlock()
+}
+
+func isFrontendReady() bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	return frontendReady
+}
+
+func markNavigationDone() {
+	windowStateMu.Lock()
+	navigationDone = true
+	windowStateMu.Unlock()
+	maybeRevealRecreatedWindow()
+}
+
+func markPendingOpenSettings() {
+	windowStateMu.Lock()
+	pendingOpenSettings = true
+	windowStateMu.Unlock()
+}
+
+func takePendingOpenSettings() bool {
+	windowStateMu.Lock()
+	defer windowStateMu.Unlock()
+	pending := pendingOpenSettings
+	pendingOpenSettings = false
+	return pending
+}
+
+// maybeRevealRecreatedWindow shows a recreated window once its page has
+// navigated and the frontend has attached its listeners. Until then the window
+// stays hidden, so a summon never flashes an empty page.
+func maybeRevealRecreatedWindow() {
+	windowStateMu.Lock()
+	ready := pendingReveal && frontendReady && navigationDone
+	if ready {
+		pendingReveal = false
+	}
+	windowStateMu.Unlock()
+	if !ready {
+		return
+	}
+	revealMainWindow()
+}
+
+// revealMainWindow makes a freshly created window visible, restoring its
+// place/opacity first and telling the frontend it was summoned.
+func revealMainWindow() {
+	w := getMainWindow()
+	if w == nil {
+		return
+	}
+	markStartupPositioned()
+	positionWindowAtStartup()
+	applyWindowOpacity()
+	w.Show()
+	w.Focus()
+	app.Event.Emit("app:show", "")
+	if state := takePendingViewState(); state != "" {
+		debugLog("restore: sending view state")
+		app.Event.Emit("app:restore-view-state", state)
+	}
+	if takePendingOpenSettings() {
+		app.Event.Emit("app:open-settings", "")
+	}
+}
+
+// --- caret/selection and scroll handoff (memory only) ---
+
+// pendingViewState is the editor state captured before a lightweight-mode
+// teardown and replayed after the next recreation. It is deliberately not
+// persisted: quitting the process forgets it.
+var (
+	viewStateMu      sync.Mutex
+	pendingViewState string
+)
+
+func setPendingViewState(state string) {
+	viewStateMu.Lock()
+	pendingViewState = state
+	viewStateMu.Unlock()
+}
+
+func takePendingViewState() string {
+	viewStateMu.Lock()
+	state := pendingViewState
+	pendingViewState = ""
+	viewStateMu.Unlock()
+	return state
+}
+
+// --- save handshake before lightweight teardown ---
+
+var (
+	flushMu    sync.Mutex
+	flushToken string
+	flushDone  chan struct{}
+)
+
+func beginFrontendFlush() (string, <-chan struct{}) {
+	token := fmt.Sprintf("%d", time.Now().UnixNano())
+	done := make(chan struct{})
+	flushMu.Lock()
+	flushToken, flushDone = token, done
+	flushMu.Unlock()
+	return token, done
+}
+
+// ackFrontendFlush records the view state (when the page sent one) before
+// releasing the waiting teardown, so the state cannot be lost to a race with
+// the window close.
+func ackFrontendFlush(token, viewState string) bool {
+	flushMu.Lock()
+	defer flushMu.Unlock()
+	if flushToken != token || flushDone == nil {
+		return false
+	}
+	if viewState != "" {
+		setPendingViewState(viewState)
+	}
+	close(flushDone)
+	flushDone = nil
+	return true
+}
+
+func abandonFrontendFlush() {
+	flushMu.Lock()
+	flushToken, flushDone = "", nil
+	flushMu.Unlock()
+}
+
+// waitForFrontendFlush asks the page to persist pending edits and waits,
+// briefly, for its acknowledgement. A missing/blocked frontend must not keep
+// the window (and its renderer memory) alive forever.
+func waitForFrontendFlush() {
+	if !isFrontendReady() || app == nil {
+		return
+	}
+	token, done := beginFrontendFlush()
+	app.Event.Emit("app:flush-before-destroy", token)
+	select {
+	case <-done:
+	case <-time.After(destroyFlushTimeout):
+		abandonFrontendFlush()
+		debugLog("lightweight: frontend flush timed out")
+	}
+}
+
+// --- lightweight timer ---
+
+// syncLightweightTimer re-evaluates the timer after a settings change.
+func syncLightweightTimer() {
+	if app == nil {
+		return
+	}
+	if getMainWindow() == nil {
+		cancelLightweightTimer()
+		return
+	}
+	if w := getMainWindow(); w != nil && w.IsVisible() {
+		cancelLightweightTimer()
+		return
+	}
+	scheduleLightweightDestroy()
+}
+
+// scheduleLightweightDestroy (re)arms the hidden-window teardown. A value of 0
+// cancels it, so the default keeps the previous always-resident behaviour.
+func scheduleLightweightDestroy() {
+	minutes := store.currentSettings().LightweightModeMinutes
+	windowStateMu.Lock()
+	if lightweightTimer != nil {
+		lightweightTimer.Stop()
+		lightweightTimer = nil
+	}
+	if minutes <= 0 || quitting {
+		windowStateMu.Unlock()
+		return
+	}
+	lightweightTimer = time.AfterFunc(time.Duration(minutes)*time.Minute, destroyHiddenMainWindow)
+	windowStateMu.Unlock()
+	debugLog("lightweight: destroy scheduled in %d min", minutes)
+}
+
+func cancelLightweightTimer() {
+	windowStateMu.Lock()
+	if lightweightTimer != nil {
+		lightweightTimer.Stop()
+		lightweightTimer = nil
+	}
+	windowStateMu.Unlock()
+}
+
+func destroyHiddenMainWindow() {
+	windowStateMu.Lock()
+	lightweightTimer = nil
+	windowStateMu.Unlock()
+
+	if isQuitting() || isPendingReveal() || isDestroying() {
+		return
+	}
+	w := getMainWindow()
+	if w == nil || w.IsVisible() {
+		return
+	}
+	windowID := w.ID()
+	debugLog("lightweight: destroying hidden main window")
+	waitForFrontendFlush()
+
+	// The user may have summoned it during the flush handshake. Mark the
+	// teardown in progress before the final visibility check: a summon from
+	// this point on is replayed after the window has gone.
+	setDestroying(true)
+	if isQuitting() {
+		setDestroying(false)
+		return
+	}
+	w = getMainWindow()
+	if w == nil || w.ID() != windowID || w.IsVisible() {
+		setDestroying(false)
+		return
+	}
+	setFrontendReady(false)
+	flushBoundsSave()
+	setDestroyTarget(windowID)
+	w.Close()
+
+	// Close() queues the WindowClosing event; clear the destroying state only
+	// after the window has actually left the manager.
+	go func(id uint) {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if cur := getMainWindow(); cur == nil || cur.ID() != id {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		windowStateMu.Lock()
+		destroying = false
+		reveal := revealAfterDestroy
+		revealAfterDestroy = false
+		windowStateMu.Unlock()
+		if reveal && !isQuitting() {
+			showMainWindow()
+		}
+	}(windowID)
+}
+
+// onMainWindowHidden schedules the lightweight teardown no matter which path
+// hid the window (Go hideWindow or the frontend's Wails Window.Hide call).
+func onMainWindowHidden() {
+	trimWorkingSetAfterHide()
+	if isPendingReveal() || isDestroying() || isQuitting() {
+		return
+	}
+	if w := getMainWindow(); w != nil && !w.IsVisible() {
+		scheduleLightweightDestroy()
+	}
+}
+
+func onMainWindowShown() {
+	cancelLightweightTimer()
+}
 
 // trayMenuStrings holds the native tray-menu labels per supported UI
 // language. English is the fallback: the tray is built before the webview
@@ -192,10 +586,15 @@ func buildTrayMenu(language string) *application.Menu {
 	})
 	menu.AddSeparator()
 	menu.Add(labels.quit).OnClick(func(ctx *application.Context) {
-		// Give the frontend a moment to flush pending auto-saves.
+		setQuitting()
+		// Give the frontend a moment to flush pending auto-saves. When
+		// lightweight mode already destroyed the window there is no page to
+		// flush and quitting can be immediate.
 		flushBoundsSave()
-		app.Event.Emit("app:quit", "")
-		time.Sleep(250 * time.Millisecond)
+		if getMainWindow() != nil {
+			app.Event.Emit("app:quit", "")
+			time.Sleep(250 * time.Millisecond)
+		}
 		app.Quit()
 	})
 	return menu
@@ -268,6 +667,9 @@ func main() {
 			ExitCode:               0,
 		},
 		Windows: application.WindowsOptions{
+			// The window is destroyed in lightweight mode; the app must stay
+			// resident (tray + hotkey) instead of quitting with its last window.
+			DisableQuitOnLastWindowClosed: true,
 			// Default is %APPDATA%/<exe>.exe which is both ugly and roaming;
 			// put WebView2's user data (EBWebView cache) under LocalAppData.
 			WebviewUserDataPath: webviewDataPath(),
@@ -286,10 +688,99 @@ func main() {
 				"--js-flags=--max-old-space-size=128",
 			},
 		},
+		Linux: application.LinuxOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
+		},
 	})
 
+	// A silent launch (auto-start) needs no UI and therefore no WebView at
+	// all: the window is created on the first hotkey/tray/second-instance
+	// summon. This is independent of lightweight mode and saves the whole
+	// WebView2/WKWebView tree until the user actually asks for the note.
+	// --smoke still creates one so the CI launch check has something to verify.
+	if !silentStart || smokeMode {
+		createMainWindow()
+	}
+
+	// Global hotkey toggles window visibility system-wide (core feature). The
+	// combo is configurable via Settings; on failure we fall back to the default.
+	toggleHotkey := store.currentSettings().Hotkey
+	if toggleHotkey == "" {
+		toggleHotkey = defaultHotkey
+	}
+	registerToggleHotkey(toggleHotkey)
+	store.hotkeyReconfigure = reconfigureHotkey
+	store.hotkeySuspend = suspendToggleHotkey
+	store.hotkeyResume = resumeToggleHotkey
+	store.pickDir = func() (string, error) {
+		dlg := app.Dialog.OpenFile().
+			CanChooseDirectories(true).
+			CanChooseFiles(false).
+			SetTitle("Select data folder")
+		if w := getMainWindow(); w != nil {
+			dlg = dlg.AttachToWindow(w)
+		}
+		return dlg.PromptForSingleSelection()
+	}
+	store.pickExportDir = func() (string, error) {
+		dlg := app.Dialog.OpenFile().
+			CanChooseDirectories(true).
+			CanChooseFiles(false).
+			SetTitle("Select export folder")
+		if w := getMainWindow(); w != nil {
+			dlg = dlg.AttachToWindow(w)
+		}
+		if dir := userDownloadsDir(); dir != "" {
+			dlg = dlg.SetDirectory(dir)
+		}
+		return dlg.PromptForSingleSelection()
+	}
+	store.pickOpenPath = func() (string, error) {
+		dlg := app.Dialog.OpenFile().
+			CanChooseFiles(true).
+			CanChooseDirectories(false).
+			AddFilter("Markdown / Text", "*.md;*.markdown;*.txt").
+			SetTitle("Import markdown")
+		if w := getMainWindow(); w != nil {
+			dlg = dlg.AttachToWindow(w)
+		}
+		return dlg.PromptForSingleSelection()
+	}
+
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
+		setupTray()
+		setupPlatformUI()
+		registerPlatformHooks()
+		if smokeMode {
+			go smokeCheck()
+			return
+		}
+		// Safety net for the rare case the navigation event never fires. The
+		// normal path is handled per window in setupMainWindow. A silent start
+		// has no window to place; the first summon handles its own reveal.
+		if getMainWindow() != nil {
+			time.AfterFunc(4*time.Second, showMainWindowAtStartup)
+		}
+	})
+
+	app.OnShutdown(func() {
+		setQuitting()
+	})
+
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// mainWindowOptions is shared by the first window and every recreation in
+// lightweight mode, so both look and behave identically.
+func mainWindowOptions() application.WebviewWindowOptions {
 	settings := store.currentSettings()
-	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
+	return application.WebviewWindowOptions{
+		Name:        mainWindowName,
 		Title:       "Slite Note",
 		Width:       initialWidth,
 		Height:      480,
@@ -304,7 +795,8 @@ func main() {
 		// (bridge.setWindowBackground). See startupBackgroundColour.
 		BackgroundColour: startupBackgroundColour(settings.Theme),
 		URL:              "/",
-		// Start hidden; shown after the startup positioning below to avoid a flash.
+		// Start hidden; the startup path or revealMainWindow shows it once the
+		// page is ready, so the first visible frame is already in place.
 		Hidden: true,
 		// EnableFileDrop is required for HTML5 file drops to reach the frontend at
 		// all. Wails' runtime listens for file drags on documentElement and, while
@@ -324,13 +816,56 @@ func main() {
 		Mac: application.MacWindow{
 			Backdrop: application.MacBackdropTransparent,
 		},
-	})
+	}
+}
 
-	// Closing the window (Alt+F4 / WM_CLOSE) hides it instead of quitting: the
-	// app stays resident and is summoned via the global hotkey or the tray
-	// (ADR-0003).
-	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
+// createMainWindow builds the window and wires its lifecycle. Called directly
+// before App.Run and, in lightweight mode, again on summon.
+func createMainWindow() *application.WebviewWindow {
+	windowStateMu.Lock()
+	frontendReady = false
+	navigationDone = false
+	windowStateMu.Unlock()
+
+	w := app.Window.NewWithOptions(mainWindowOptions())
+	setupMainWindow(w)
+	return w
+}
+
+// createMainWindowOnMainThread marshals window creation for callers on the
+// hotkey/tray goroutines; Wails' UI creation must happen on the main thread.
+func createMainWindowOnMainThread() *application.WebviewWindow {
+	var w *application.WebviewWindow
+	application.InvokeSync(func() {
+		w = createMainWindow()
+	})
+	return w
+}
+
+func setupMainWindow(w *application.WebviewWindow) {
+	// Close = hide (ADR-0003). Hooks run before Wails' built-in close listener
+	// and can cancel it; a deliberate lightweight teardown marks the window ID
+	// so that one Close() goes through and removes the native window.
+	w.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if isDestroyTarget(w.ID()) {
+			return
+		}
+		event.Cancel()
 		hideWindow()
+	})
+	// A no-op listener keeps the native close event subscribed on macOS/Linux,
+	// where Wails only registers platform callbacks for event IDs that have a
+	// listener. The hook above still decides whether the close happens.
+	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {})
+
+	// Track visibility regardless of which path hid/shown the window: the
+	// frontend calls Wails Window.Hide() directly from its title bar, which
+	// never passes through Go's hideWindow.
+	w.OnWindowEvent(events.Common.WindowHide, func(*application.WindowEvent) {
+		onMainWindowHidden()
+	})
+	w.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+		onMainWindowShown()
 	})
 
 	// macOS: file drops are intercepted by Wails' native drag overlay (see
@@ -343,7 +878,7 @@ func main() {
 	// and the release point is broadcast so the picture lands where the pointer
 	// was. Windows keeps the plain DOM path: the event fires there too (after
 	// the DOM drop has already inserted the image), hence the darwin gate.
-	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+	w.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		if runtime.GOOS != "darwin" {
 			return
 		}
@@ -359,86 +894,37 @@ func main() {
 		app.Event.Emit("app:files-dropped", droppedFilesEvent{X: x, Y: y})
 	})
 
-	// Global hotkey toggles window visibility system-wide (core feature). The
-	// combo is configurable via Settings; on failure we fall back to the default.
-	toggleHotkey := store.currentSettings().Hotkey
-	if toggleHotkey == "" {
-		toggleHotkey = defaultHotkey
-	}
-	registerToggleHotkey(toggleHotkey)
-	store.hotkeyReconfigure = reconfigureHotkey
-	store.hotkeySuspend = suspendToggleHotkey
-	store.hotkeyResume = resumeToggleHotkey
-	store.pickDir = func() (string, error) {
-		result, err := app.Dialog.OpenFile().
-			CanChooseDirectories(true).
-			CanChooseFiles(false).
-			SetTitle("Select data folder").
-			AttachToWindow(mainWindow).
-			PromptForSingleSelection()
-		return result, err
-	}
-	store.pickExportDir = func() (string, error) {
-		dlg := app.Dialog.OpenFile().
-			CanChooseDirectories(true).
-			CanChooseFiles(false).
-			SetTitle("Select export folder").
-			AttachToWindow(mainWindow)
-		if dir := userDownloadsDir(); dir != "" {
-			dlg = dlg.SetDirectory(dir)
-		}
-		return dlg.PromptForSingleSelection()
-	}
-	store.pickOpenPath = func() (string, error) {
-		return app.Dialog.OpenFile().
-			CanChooseFiles(true).
-			CanChooseDirectories(false).
-			AddFilter("Markdown / Text", "*.md;*.markdown;*.txt").
-			SetTitle("Import markdown").
-			AttachToWindow(mainWindow).
-			PromptForSingleSelection()
-	}
-
-	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
-		setupTray()
-		setupPlatformUI()
-		registerPlatformHooks()
-		if smokeMode {
-			go smokeCheck()
-			return
-		}
-		// Wait for the WebView to finish loading, then position and show the
-		// window in one step: the first visible frame is already at the left
-		// edge, so no post-hoc repositioning (no visible jump). The navigation-
-		// completed event is platform-specific: Windows emits
-		// events.Windows.WebViewNavigationCompleted, macOS emits
-		// events.Mac.WebViewDidFinishNavigation (the Windows event never fires
-		// there — without this the startup placement only ever ran via the
-		// 4s safety net below, so the window kept its default centered position).
-		// On a silent launch (--silent, e.g. auto-start) the window stays hidden
-		// and is summoned via hotkey/tray.
-		positionAndShow := func(*application.WindowEvent) {
-			// Fires on every navigation completion — a repeat after the initial
-			// boot means the webview reloaded (e.g. a killed renderer), which
-			// would explain a full UI flash on summon.
-			debugLog("navigation completed")
-			showMainWindowAtStartup()
-		}
-		mainWindow.OnWindowEvent(events.Windows.WebViewNavigationCompleted, positionAndShow)
-		mainWindow.OnWindowEvent(events.Mac.WebViewDidFinishNavigation, positionAndShow)
-		// Safety net for the rare case the navigation event never fires.
-		time.AfterFunc(4*time.Second, showMainWindowAtStartup)
-	})
-
 	// Defensive: Wails' own setBounds path re-applies LWA_ALPHA=255 for
 	// layered windows (e.g. after a DPI-driven resize), which would undo a
 	// user-set opacity. Re-apply the persisted value whenever the window
 	// is resized or moved by the framework.
-	applyOpacityOnWindowChanges()
-
-	if err := app.Run(); err != nil {
-		log.Fatal(err)
+	onChange := func(*application.WindowEvent) {
+		applyWindowOpacity()
+		scheduleBoundsSave()
 	}
+	w.OnWindowEvent(events.Common.WindowDidResize, onChange)
+	w.OnWindowEvent(events.Common.WindowDidMove, onChange)
+
+	// Wait for the WebView to finish loading, then position and show it in one
+	// step: the first visible frame is already at the left edge, so no
+	// post-hoc repositioning (no visible jump). The navigation-completed event
+	// is platform-specific: Windows emits
+	// events.Windows.WebViewNavigationCompleted, macOS emits
+	// events.Mac.WebViewDidFinishNavigation.
+	w.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+		onMainWindowNavigation()
+	})
+	w.OnWindowEvent(events.Mac.WebViewDidFinishNavigation, func(*application.WindowEvent) {
+		onMainWindowNavigation()
+	})
+}
+
+// onMainWindowNavigation completes the first-boot show or, for a recreated
+// window, marks navigation ready for the reveal handshake.
+func onMainWindowNavigation() {
+	debugLog("navigation completed")
+	markNavigationDone()
+	showMainWindowAtStartup()
 }
 
 // onSecondInstanceLaunch handles a second process launch (Windows: named
@@ -451,9 +937,12 @@ func onSecondInstanceLaunch(data application.SecondInstanceData) {
 			// before overwriting the exe: flush pending auto-saves, then
 			// quit. Force-killing would risk losing the last keystrokes.
 			debugLog("second instance requested quit")
+			setQuitting()
 			flushBoundsSave()
-			app.Event.Emit("app:quit", "")
-			time.Sleep(250 * time.Millisecond)
+			if getMainWindow() != nil {
+				app.Event.Emit("app:quit", "")
+				time.Sleep(250 * time.Millisecond)
+			}
 			app.Quit()
 			return
 		case "--silent":
@@ -471,7 +960,11 @@ func onSecondInstanceLaunch(data application.SecondInstanceData) {
 
 // toggleHotkeyCallback toggles window visibility and logs the event.
 func toggleHotkeyCallback() {
-	debugLog("hotkey fired, visible=%v", mainWindow.IsVisible())
+	visible := false
+	if w := getMainWindow(); w != nil {
+		visible = w.IsVisible()
+	}
+	debugLog("hotkey fired, visible=%v", visible)
 	toggleWindow()
 }
 
@@ -569,6 +1062,9 @@ func resumeToggleHotkey() error {
 // Returns true when a placement was applied, false when no screen geometry
 // was available yet (the startup path then re-runs it shortly).
 func positionWindowAtStartup() bool {
+	if getMainWindow() == nil {
+		return false
+	}
 	st := store.currentSettings()
 	if st.WindowWidth > 0 && st.WindowHeight > 0 &&
 		boundsVisible(st.WindowX, st.WindowY, st.WindowWidth, st.WindowHeight) {
@@ -622,8 +1118,20 @@ func boundsVisible(x, y, w, h int) bool {
 // (Win32 SetWindowPos on Windows; logical-point conversion on macOS).
 
 // positionedOnce guards the startup placement so later Show() calls (tray /
-// hotkey) do not yank the window back to the left edge.
-var positionedOnce = false
+// hotkey) do not yank the window back to the left edge. A silent start has no
+// window, so the first summon claims it when it reveals that window.
+var (
+	positionedOnce bool
+	positionMu     sync.Mutex
+)
+
+// markStartupPositioned records that the window has been placed for the first
+// time (normal startup or the first silent summon).
+func markStartupPositioned() {
+	positionMu.Lock()
+	positionedOnce = true
+	positionMu.Unlock()
+}
 
 // silentStart is true when launched with --silent (auto-start): the window
 // is positioned but never shown; the user summons it via hotkey or tray.
@@ -640,21 +1148,72 @@ var smokeMode = false
 // sticky note is summoned to be written in. Plain refocuses (the window stays
 // visible, e.g. the user alt-tabs back) do NOT emit this event, so the
 // frontend's caret memory / selection is never disturbed.
+//
+// In lightweight mode there may be no window at all: it is recreated and
+// revealed once its page is ready, which is the small summon delay the
+// setting warns about.
 func showMainWindow() {
+	if isQuitting() {
+		return
+	}
+	windowStateMu.Lock()
+	if destroying {
+		revealAfterDestroy = true
+		windowStateMu.Unlock()
+		return
+	}
+	windowStateMu.Unlock()
+	if isPendingReveal() {
+		return // a recreation is already on its way
+	}
+	cancelLightweightTimer()
+	w := getMainWindow()
+	if w == nil {
+		debugLog("show: recreating main window")
+		setPendingReveal(true)
+		if createMainWindowOnMainThread() == nil {
+			setPendingReveal(false)
+			return
+		}
+		time.AfterFunc(revealFallbackDelay, revealRecreatedWindowFallback)
+		return
+	}
 	debugLog("show: emitting app:show")
 	app.Event.Emit("app:show", "")
-	mainWindow.Show()
-	mainWindow.Focus()
+	w.Show()
+	w.Focus()
+}
+
+// revealRecreatedWindowFallback shows the window even if the ready handshake
+// never arrives (a broken page must not leave the app unreachable).
+func revealRecreatedWindowFallback() {
+	windowStateMu.Lock()
+	if !pendingReveal {
+		windowStateMu.Unlock()
+		return
+	}
+	pendingReveal = false
+	windowStateMu.Unlock()
+	revealMainWindow()
 }
 
 // showMainWindowAtStartup positions the window once the WebView has settled
 // and shows it (unless this is a silent launch). Runs at most once; if screen
 // geometry was not available yet, the placement itself is retried shortly.
 func showMainWindowAtStartup() {
+	// A recreated window is handled by the reveal handshake; a silent start
+	// has no window yet and stays without one until first summon.
+	if isPendingReveal() || getMainWindow() == nil {
+		return
+	}
+	positionMu.Lock()
 	if positionedOnce {
+		positionMu.Unlock()
 		return
 	}
 	positionedOnce = true
+	positionMu.Unlock()
+
 	if !positionWindowAtStartup() {
 		// Screen cache not populated yet (macOS fills it after launch): re-run
 		// the placement once it is, so a sticky note never stays centered on
@@ -668,28 +1227,12 @@ func showMainWindowAtStartup() {
 	if !silentStart {
 		showMainWindow()
 	} else {
-		// Silent launch (auto-start): the window is born hidden and nobody
-		// will ever call hideWindow(), so the hide-time trim would never fire
-		// and a login-started instance would sit at full working set until
-		// the first manual hide. Schedule the same debounced trim — its
-		// visibility gate keeps it correct if the user summons the window
-		// before it fires.
+		// Silent launch (auto-start): the window is born hidden and no hide
+		// event fires, so start both the working-set trim and the lightweight
+		// teardown countdown here.
 		trimWorkingSetAfterHide()
+		scheduleLightweightDestroy()
 	}
-}
-
-// applyOpacityOnWindowChanges re-applies the window opacity after framework
-// resizes/moves (on Windows, Wails' setBounds re-applies LWA_ALPHA=255 for
-// layered windows, undoing a user-set transparency; on macOS the native
-// opacity call is a no-op) and debounce-saves the window bounds so the
-// position/size survive a restart.
-func applyOpacityOnWindowChanges() {
-	onChange := func(*application.WindowEvent) {
-		applyWindowOpacity()
-		scheduleBoundsSave()
-	}
-	mainWindow.OnWindowEvent(events.Common.WindowDidResize, onChange)
-	mainWindow.OnWindowEvent(events.Common.WindowDidMove, onChange)
 }
 
 // --- window bounds persistence (debounced save) ---
@@ -757,7 +1300,8 @@ func setupTray() {
 // fails. Uses the same startup path as a normal launch.
 func smokeCheck() {
 	time.Sleep(1500 * time.Millisecond)
-	if mainWindow == nil {
+	w := getMainWindow()
+	if w == nil {
 		log.Println("SMOKE FAIL: main window was never created")
 		os.Exit(1)
 	}
@@ -772,7 +1316,7 @@ func smokeCheck() {
 		// slow-but-healthy window does not fail the smoke test; the deadline
 		// still catches a window that genuinely never appears.
 		deadline := time.Now().Add(5 * time.Second)
-		for !mainWindow.IsVisible() {
+		for !w.IsVisible() {
 			if time.Now().After(deadline) {
 				log.Println("SMOKE FAIL: window not visible after show")
 				os.Exit(1)
@@ -782,25 +1326,36 @@ func smokeCheck() {
 	}
 	debugLog("smoke ok")
 	fmt.Println("SMOKE OK")
+	setQuitting()
 	app.Quit()
 	os.Exit(0)
 }
 
 // toggleWindow shows or hides the main window (hotkey, tray click, tray menu).
+// A destroyed window counts as hidden and is recreated by showMainWindow.
 func toggleWindow() {
-	if mainWindow.IsVisible() {
+	if w := getMainWindow(); w != nil && w.IsVisible() {
 		hideWindow()
-	} else {
-		showMainWindow()
+		return
 	}
+	showMainWindow()
 }
 
 func hideWindow() {
+	w := getMainWindow()
+	if w == nil {
+		cancelLightweightTimer()
+		return
+	}
 	// Let the frontend flush pending auto-saves before the window disappears.
 	app.Event.Emit("app:hide", "")
 	flushBoundsSave()
-	mainWindow.Hide()
+	w.Hide()
 	// Release the (cold) physical working set of this process and the WebView2
 	// children; Windows-side only, no-op on macOS (see platform_windows.go).
+	// The WindowHide event schedules the lightweight teardown for hides that
+	// bypass this function (the frontend's title-bar button calls Wails
+	// Window.Hide directly).
 	trimWorkingSetAfterHide()
+	scheduleLightweightDestroy()
 }
