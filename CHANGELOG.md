@@ -1,3 +1,8 @@
+## [0.11.0] - 2026-10-23
+
+### Features
+
+- *(window)* Add a lightweight mode that destroys the hidden WebView
 ## [0.10.1] - 2026-09-14
 
 ### Bug Fixes
