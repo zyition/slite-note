@@ -16,7 +16,7 @@
     "@blocknote/react": "^0.56.0",
     "@mantine/core": "^9.7.3",
     "@mantine/hooks": "^9.7.3",
-    "@wailsio/runtime": "3.0.0-beta.34",
+    "@wailsio/runtime": "3.1.0",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
