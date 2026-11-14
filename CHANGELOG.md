@@ -1,3 +1,12 @@
+## [0.12.0] - 2026-11-14
+
+### Features
+
+- *(ui)* Open the note list scrolled to the active note
+
+### Refactoring
+
+- *(store)* Use wails autostart, browser and file-manager apis
 ## [0.11.0] - 2026-10-23
 
 ### Features
