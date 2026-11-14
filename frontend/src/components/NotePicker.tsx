@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown, FileDown, FileUp, Pencil, Trash2, X } from "lucide-react";
 import type { Note } from "../types/note";
 import { t } from "../services/i18n";
@@ -42,8 +42,25 @@ export function NotePicker({
   const renamingIdRef = useRef<string | null>(null);
   const draftRef = useRef("");
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const activeRowRef = useRef<HTMLDivElement | null>(null);
 
   const active = notes.find((n) => n.id === activeId) ?? null;
+
+  // Opening the list scrolls the note being edited into view (centered), so a
+  // long list doesn't always start at the oldest note with the active row far
+  // below the fold. Layout effect: the scroll is applied before the first
+  // paint, so the list never flashes at the top. Clamped at both ends by the
+  // browser's own scrollTop limits.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const list = listRef.current;
+    const row = activeRowRef.current;
+    if (!list || !row) return;
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    list.scrollTop += rowRect.top - listRect.top - (listRect.height - rowRect.height) / 2;
+  }, [open]);
 
   const startRename = (note: Note) => {
     renamingIdRef.current = note.id;
@@ -117,7 +134,10 @@ export function NotePicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-7 z-50 max-h-56 w-56 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg)] p-1 shadow-lg">
+        <div
+          ref={listRef}
+          className="absolute left-0 top-7 z-50 max-h-56 w-56 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg)] p-1 shadow-lg"
+        >
           {notes.length === 0 && (
             <div className="px-2 py-1.5 text-[length:var(--fs-body)] text-[var(--fg-muted)]">{t.untitled}</div>
           )}
@@ -159,6 +179,7 @@ export function NotePicker({
             return (
               <div
                 key={note.id}
+                ref={isActive ? activeRowRef : undefined}
                 className={`group flex w-full items-center rounded px-1 text-left text-[length:var(--fs-body)] ${
                   isActive ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]" : "hover:bg-[var(--hover)]"
                 }`}
