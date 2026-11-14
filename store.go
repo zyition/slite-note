@@ -33,7 +33,7 @@ type Settings struct {
 	Theme                string  `json:"theme"` // "system" | "yellow" | "gray" | "dark"
 	AlwaysOnTop          bool    `json:"alwaysOnTop"`
 	Hotkey               string  `json:"hotkey"`               // global toggle accelerator, e.g. "Alt+Shift+S"
-	LaunchAtStartup      bool    `json:"launchAtStartup"`      // Windows Run key (HKCU)
+	LaunchAtStartup      bool    `json:"launchAtStartup"`      // OS login item (app.Autostart)
 	Opacity              float64 `json:"opacity"`              // window opacity 0.3–1.0, 1 = opaque
 	Language             string  `json:"language"`             // "" (follow OS) | "en" | "zh-CN"; resolved on the frontend
 	UiScale              string  `json:"uiScale"`              // "small" | "medium" | "large"; "" = medium (default)
@@ -159,8 +159,9 @@ func NewStore() *Store {
 	}
 	s.settings = s.readSettingsFile(filepath.Join(s.dataDir, "settings.json"))
 
-	// Sync the auto-start flag so the settings page reflects reality.
-	s.settings.LaunchAtStartup = s.getLaunchAtStartup()
+	// LaunchAtStartup is synced by syncLaunchAtStartup once the application
+	// exists: the flag lives in the OS (app.Autostart) and cannot be read
+	// before application.New. The on-disk value is only a mirror.
 
 	// Guarantee a concrete default so the UI always shows a real combo.
 	if s.settings.Hotkey == "" {
@@ -212,10 +213,15 @@ func (s *Store) AppVersion() string {
 	return appVersion
 }
 
-// OpenURL opens a URL in the user's default browser. Implemented per platform
-// (Windows ShellExecute / macOS `open`). Used by the About section's links;
-// the webview does not follow external links.
-func (s *Store) OpenURL(url string) error { return openURL(url) }
+// OpenURL opens a URL in the user's default browser through Wails' browser
+// manager. Used by the About section's links; the webview does not follow
+// external links.
+func (s *Store) OpenURL(url string) error {
+	if url == "" {
+		return fmt.Errorf("empty url")
+	}
+	return app.Browser.OpenURL(url)
+}
 
 // SetTrayLanguage updates the native tray-menu labels after the frontend
 // resolves the UI language (on boot, and again whenever the user changes it).
@@ -1008,9 +1014,13 @@ func sanitizeFileName(name string) string {
 }
 
 // OpenDataDir reveals the active data directory in the file manager
-// (Explorer on Windows, Finder on macOS). No-op in browser fallback mode.
+// (Explorer on Windows, Finder on macOS) through Wails' environment manager.
 func (s *Store) OpenDataDir() error {
-	return openDataDir(s.currentDataDir())
+	dir := s.currentDataDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	return app.Env.OpenFileManager(dir, false)
 }
 
 // CurrentDataDir returns the active data directory path (display in settings).
@@ -1155,8 +1165,16 @@ func (s *Store) writeAppConfig(cfg AppConfig) error {
 	return nil
 }
 
-// setLaunchAtStartup and getLaunchAtStartup are implemented per platform
-// (Windows HKCU Run key / macOS Wails Autostart — see store_platform_*.go).
+// syncLaunchAtStartup mirrors the OS login-item state into Settings so the
+// settings panel reflects reality. It must run after application.New (the
+// Autostart manager lives on the app) — NewStore only loads the persisted
+// file, whose LaunchAtStartup value is a stale mirror.
+func (s *Store) syncLaunchAtStartup() {
+	enabled := s.getLaunchAtStartup()
+	s.mu.Lock()
+	s.settings.LaunchAtStartup = enabled
+	s.mu.Unlock()
+}
 
 func (s *Store) readSettingsFile(path string) Settings {
 	settings := Settings{Theme: "system"}

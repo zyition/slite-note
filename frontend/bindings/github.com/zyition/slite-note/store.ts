@@ -127,7 +127,7 @@ export function MoveDataDir(path: string): $CancellablePromise<void> {
 
 /**
  * OpenDataDir reveals the active data directory in the file manager
- * (Explorer on Windows, Finder on macOS). No-op in browser fallback mode.
+ * (Explorer on Windows, Finder on macOS) through Wails' environment manager.
  */
 export function OpenDataDir(): $CancellablePromise<void> {
     return $Call.ByID(11373138);
@@ -143,9 +143,9 @@ export function OpenMarkdownDialog(): $CancellablePromise<string> {
 }
 
 /**
- * OpenURL opens a URL in the user's default browser. Implemented per platform
- * (Windows ShellExecute / macOS `open`). Used by the About section's links;
- * the webview does not follow external links.
+ * OpenURL opens a URL in the user's default browser through Wails' browser
+ * manager. Used by the About section's links; the webview does not follow
+ * external links.
  */
 export function OpenURL(url: string): $CancellablePromise<void> {
     return $Call.ByID(547634812, url);

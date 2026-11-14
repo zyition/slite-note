@@ -29,3 +29,13 @@ macOS 移植的两个硬约束：
 - 平台函数签名统一，未来 Linux 适配 = 新增 `platform_linux.go` + `store_platform_linux.go`，共享代码零改动。
 - 前端平台分支（`isMac()`）集中在 `services/platform.ts` / `hotkey.ts` / `shortcuts.ts`，组件层不散落平台判断。
 - Windows 行为零变化（纯搬迁，registry 键名、`slite` 旧键兼容、LWA 逻辑均保留）。
+
+## 后续（Wails v3 正式版）
+
+v3.0.0 / v3.1.0 转正后，其中三项能力有了官方跨平台 API，已收回共享层，`store_platform_*.go` 只剩自启 artifact 名：
+
+- 开机自启：两侧统一 `app.Autostart`（`store_autostart.go`）——Windows 仍写 HKCU Run 的 `slite-note` 值，macOS 仍是 `com.zyition.slite-note`。旧实现按「值是否存在」判断，改名后指向死路径的 `slite` 旧键会被误报为已启用；官方实现比对注册命令与当前可执行文件路径，这类残留正确显示为未启用，因此不再需要清理旧键。
+- 打开 URL：`app.Browser.OpenURL`。
+- 打开数据目录：`app.Env.OpenFileManager(dir, false)`。
+
+仍留在平台层：窗口透明度（Windows `WS_EX_LAYERED`，Wails 无公开 API）、启动定位（`SetWindowPos`，Wails 对隐藏窗口的 `SetPosition` 不可靠且会重置 alpha）、`userDownloadsDir`、系统深色偏好（`app.Env.IsDarkMode` 在 `application.New` 之前返回 false，而它服务于首帧背景色）。

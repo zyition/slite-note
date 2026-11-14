@@ -75,7 +75,8 @@ on every release. Put user-visible detail in commit bodies instead.
 ├── platform_windows.go # Win32: WS_EX_LAYERED opacity, SetWindowPos, ...
 ├── platform_darwin.go  # macOS: app menu bar, Retina bounds, lifecycle hooks
 ├── store.go           # Store service (bindings): notes + settings persistence
-├── store_platform_darwin.go # macOS: autostart (SMAppService), open URL/dir
+├── store_autostart.go # login item via Wails Autostart (shared by both platforms)
+├── store_platform_windows.go / _darwin.go # autostart identifier only
 ├── tools/genicon/     # Icon generator (Go, image/png)
 ├── frontend/src/
 │   ├── App.tsx        # orchestration: boot/save/theme/new/switch
@@ -95,12 +96,14 @@ on every release. Put user-visible detail in commit bodies instead.
 - **Close = hide, tray = quit, hotkey = summon.** Do not make close quit. On
   macOS this maps to Cmd+W → hide (window menu) and Cmd+Q → quit; the Dock
   icon reopens a hidden window (ApplicationShouldHandleReopen).
-- `--silent` launch (auto-start) must never pop the window. On macOS the
-  autostart arguments carry `--silent` too (`store_platform_darwin.go`).
+- `--silent` launch (auto-start) must never pop the window. Both platforms
+  register the login item through Wails' `app.Autostart` with `--silent`
+  arguments (`store_autostart.go`).
 - **Platform code lives in the platform layer** (ADR-0006):
-  `platform_windows.go` / `platform_darwin.go` (+ `store_platform_darwin.go`)
-  expose identical function signatures; everything else stays platform-neutral
-  (no new `runtime.GOOS` branches in shared code).
+  `platform_windows.go` / `platform_darwin.go` expose identical function
+  signatures; everything else stays platform-neutral (no new `runtime.GOOS`
+  branches in shared code). Open URL / reveal data dir go through Wails'
+  `app.Browser` / `app.Env` managers, so no platform files are needed for them.
 - Window is positioned with raw Win32 `SetWindowPos` after WebView2 navigation
   completes on Windows (`positionWindowAtStartup`/`showMainWindowAtStartup`);
   macOS goes through `setWindowBounds` with Retina scale-factor conversion

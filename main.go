@@ -751,6 +751,9 @@ func main() {
 	}
 
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
+		// The Autostart manager only exists once the application does, which
+		// is why the login-item flag is mirrored here rather than in NewStore.
+		store.syncLaunchAtStartup()
 		setupTray()
 		setupPlatformUI()
 		registerPlatformHooks()

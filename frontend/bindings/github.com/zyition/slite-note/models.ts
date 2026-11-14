@@ -52,7 +52,7 @@ export interface Settings {
     "hotkey": string;
 
     /**
-     * Windows Run key (HKCU)
+     * OS login item (app.Autostart)
      */
     "launchAtStartup": boolean;
 
